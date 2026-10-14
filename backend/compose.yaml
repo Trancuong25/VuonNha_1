@@ -1,0 +1,20 @@
+services:
+  plant-scan:
+    build: .
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8787
+      GARDEN_DB: /app/data/garden.sqlite
+    ports:
+      - "127.0.0.1:8787:8787"
+    restart: unless-stopped
+    read_only: true
+    volumes:
+      - garden-data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+volumes:
+  garden-data:
