@@ -78,6 +78,7 @@ class PlantScanRepository(private val ctx: Context) {
                     401 -> "Dịch vụ nhận diện tạm thời không khả dụng."
                     429 -> "Dịch vụ đang bận. Hãy thử lại sau."
                     503 -> "Dịch vụ nhận diện chưa sẵn sàng."
+                    504 -> "Dịch vụ nhận diện phản hồi chậm. Hãy thử lại sau hoặc tự nhập tên cây."
                     else -> "Không quét được ảnh. Kiểm tra kết nối và dịch vụ AI."
                 }
             }

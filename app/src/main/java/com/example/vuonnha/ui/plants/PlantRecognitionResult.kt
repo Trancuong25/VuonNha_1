@@ -2,6 +2,7 @@ package com.example.vuonnha.ui.plants
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -26,14 +27,15 @@ fun PlantRecognitionResult(candidates: List<PlantCandidate>, selected: PlantCand
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 TextButton(onBack) { Text("‹ Quay lại ảnh") }
-                ScreenHeader("Kết quả nhận diện", "Kiểm tra tên loài trước khi tiếp tục")
-                photo?.let { Image(it.asImageBitmap(), "Ảnh vừa quét", Modifier.fillMaxWidth().height(220.dp).clip(MaterialTheme.shapes.large), contentScale = ContentScale.Crop) }
+                ScreenHeader("Kết quả nhận diện", "Bước 1/2 · Kiểm tra loài, sau đó đặt tên và lịch nhắc")
+                photo?.let { Image(it.asImageBitmap(), "Ảnh vừa quét", Modifier.fillMaxWidth().height(220.dp).clip(MaterialTheme.shapes.large).background(MaterialTheme.colorScheme.surfaceContainerLow), contentScale = ContentScale.Fit) }
                 Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(selected.name, style = MaterialTheme.typography.titleLarge)
                         Text(selected.scientificName, style = MaterialTheme.typography.bodyMedium)
                         Text("Mức chắc chắn: ${when(selected.confidence) { "high" -> "cao"; "medium" -> "vừa"; else -> "thấp — hãy kiểm tra lại" }}",
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (selected.confidence == "low") Text("Chưa đủ chắc để kết luận. Bạn có thể chụp rõ lá hoặc hoa hơn, hoặc sửa loài ở bước tiếp theo.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                         HorizontalDivider()
                         Text("Đặc điểm nhận diện", style = MaterialTheme.typography.titleSmall)
                         selected.features.forEach { Text("• $it") }

@@ -1,96 +1,90 @@
-# Cấu hình nhận diện cây từ ảnh
+# Backend Vườn Nhà
 
-Backend mẫu dành cho phát triển cục bộ, Node.js 24 trở lên, không cần cài thư viện. Khóa Gemini chỉ có trên backend; không đưa vào ứng dụng Android hoặc Git.
+Hướng dẫn cấu hình và vận hành, cập nhật 16/10/2026. Tổng quan, luồng người dùng, giới hạn và việc cần bổ sung chỉ cập nhật trong [README chính](../README.md).
 
-Nếu đã có `.env`, nhấp đúp `run-backend.cmd` để chạy và giữ cửa sổ mở. Docker không bắt buộc. Xem [CHAY_APP.md](../CHAY_APP.md) và phạm vi bản hiện tại ở [BAO_CAO_SAN_SANG.md](../BAO_CAO_SAN_SANG.md).
+## Chạy cục bộ
 
-## Chạy trên máy tính
+Node.js 24+, không cần npm install vì dùng module tích hợp. Docker tùy chọn.
 
-1. Giữ yêu cầu không bật Billing. Kiểm tra mô hình và hạn mức miễn phí được Google AI Studio hiển thị cho tài khoản trước khi chọn cấu hình. Không bảo đảm miễn phí vô hạn; khi hết hạn mức, backend trả lỗi, không tự nâng cấp hay đổi nhà cung cấp.
-2. Sao chép `.env.example` thành `.env` trong thư mục này. File `.env` được Git bỏ qua.
-3. Điền `GEMINI_API_KEY`, `GEMINI_MODEL=gemini-3.8-flash` và `SCAN_TOKEN` (mã truy cập backend do bạn tự tạo). Không chia sẻ nội dung file.
-4. Chạy trong terminal tại thư mục `backend`:
+1. Sao chép .env.example thành .env nếu chưa có; không ghi đè .env hiện có.
+2. Điền GEMINI_API_KEY riêng, GEMINI_MODEL và SCAN_TOKEN. Mặc định mô hình hiện tại: gemini-3.1-flash-lite. Không in/chia sẻ khóa.
+3. Bản Android debug dùng http://127.0.0.1:8787/identify và token phát triển vuonnha-local-2026. SCAN_TOKEN cục bộ cần trùng; đây không phải khóa Gemini.
+4. Chạy run-backend.cmd và giữ tiến trình; script gọi connect-usb.ps1 để tạo ADB reverse cho thiết bị được cho phép. Nếu server đang chạy, chỉ chạy connect-usb.ps1 khi nối lại thiết bị.
+
+Hoặc từ thư mục backend:
 
 ```powershell
 node --env-file=.env server.mjs
 ```
 
-Server chỉ lắng nghe `127.0.0.1`. `GET /health` trả trạng thái đã cấu hình. Khi chưa có cấu hình, quét trả lỗi và không gọi AI.
-
-## Chạy bằng Docker Desktop
-
-Docker Desktop cần chạy chế độ Linux containers. Tạo `.env` như phần trên, rồi chạy trong thư mục `backend`:
+Node mặc định chỉ lắng nghe 127.0.0.1. Khi đổi .env phải khởi động lại đúng server. Nếu cổng 8787 bận, kiểm tra tiến trình trước, không chạy nhiều bản hoặc dừng tiến trình không xác định.
 
 ```powershell
-docker compose up -d --build
 Invoke-RestMethod http://127.0.0.1:8787/health
 ```
 
-`ready: true` chỉ xác nhận ba biến cấu hình đã có giá trị, không xác nhận API key hợp lệ, tài khoản có quyền dùng mô hình hay đã có hạn mức. Quét một ảnh thật mới kiểm tra được kết nối AI.
+ready chỉ xác nhận đã có biến cấu hình, không xác nhận khóa/quota/mô hình gọi thật thành công. Người dùng app không nhập API key. API Gemini phụ thuộc hạn mức tài khoản, không tự bật Billing hoặc chuyển sang dịch vụ tính phí.
 
-Backend lắng nghe mọi giao diện bên trong container, nhưng cổng trên máy tính chỉ mở ở `127.0.0.1`. File `.env` được truyền vào lúc chạy; `.dockerignore` loại khóa khỏi image. Đổi cấu hình rồi chạy `docker compose up -d --force-recreate`. Xem log bằng `docker compose logs --tail=30`; dừng bằng `docker compose down`.
-
-## Kết nối Android emulator
-
-Từ bản debug ngày 10/10/2026, cả điện thoại USB và emulator dùng localhost thông qua ADB reverse. Khi cắm/rút cáp hoặc khởi động lại thiết bị, chạy `connect-usb.ps1` hoặc mở lại `run-backend.cmd`; script tạo đường chuyển cổng cho mọi thiết bị đã cho phép gỡ lỗi USB. Giữ cáp và backend chạy trong khi thử. Nếu backend đã chạy, chỉ chạy script kết nối, không chạy thêm server.
-
-Bản debug cấu hình sẵn URL `http://127.0.0.1:8787/identify` và token phát triển `vuonnha-local-2026` trong BuildConfig. Người dùng không nhập URL hoặc mã. Backend local cần SCAN_TOKEN trùng giá trị này. Không đưa GEMINI_API_KEY vào APK.
-
-Bản release lấy URL HTTPS qua Gradle property `SCAN_ENDPOINT` khi build. Hiện chưa có URL triển khai và cơ chế cấp phiên xác thực cho người dùng. Token release để trống có chủ đích; không dùng token debug chung cho app công khai. Chưa đủ điều kiện phát hành tính năng quét cho người dùng thật.
-
-Điện thoại thật dùng `127.0.0.1` với ADB reverse khi thử qua USB. Để đưa lên máy chủ, bổ sung HTTPS, đăng nhập người dùng và hạn mức sử dụng, rồi cấu hình URL HTTPS. Mã truy cập cố định trong mẫu chỉ dành cho thử nghiệm cá nhân, không phải hệ thống xác thực cho sản phẩm công khai.
-
-## Luồng trong ứng dụng
-
-### Tra cứu bằng tên: danh mục trước, AI khi chưa có
-
-Thêm vào vườn → nhập tên loài → Tra cứu thông tin cây → chọn kết quả → kiểm tra và sửa → lưu. API `GET /plants?q=<tên>` ưu tiên `plant-catalog.mjs`; danh mục không cần khóa Gemini. Nếu ngoài danh mục, backend cần xác thực và gọi Gemini để đề xuất tối đa 3 loài, hiển thị là gợi ý AI. Đây không phải tìm kiếm web có nguồn. Khi dịch vụ lỗi hoặc không có kết quả, người dùng vẫn nhập tay được.
-
-Trả tên khoa học, chiều cao trưởng thành tham khảo, độ ẩm không khí, đất/giá thể, ánh sáng, nguồn và chu kỳ kiểm tra gợi ý. Giống và chiều cao đo thực tế do người dùng điền. Thông tin được lưu trên điện thoại và nằm trong sao lưu. Thêm loài mới bằng dữ liệu có nguồn trong plant-catalog.mjs, khởi động lại backend. Với Docker cần build lại image.
-
-Nút **Quét cây** → camera hoặc chọn ảnh → nhận diện → đọc màn hình kết quả → **Tiếp theo** → biểu mẫu **Thêm vào vườn**. Ảnh được thu nhỏ/nén JPEG; backend không lưu ảnh ra đĩa, nhưng gửi ảnh tới Gemini theo chính sách của nhà cung cấp.
-
-Kết quả gồm tối đa ba loài, tên khoa học, đặc điểm nhìn thấy, mức tự đánh giá và hướng dẫn ngắn. Sau khi bấm Tiếp theo, biểu mẫu có thông tin/lịch gợi ý để người dùng duyệt. Không tự lưu hay xác nhận chắc chắn loài. Không nhận diện được trả danh sách rỗng. Cá/thú cưng vẫn thêm thủ công.
-
-- Trong biểu mẫu, **Bỏ gợi ý, tự nhập** xoá thông tin được điền.
-- Có thể ẩn nút quét trong Cài đặt và bật lại sau.
-- Khi xác nhận lưu, ảnh quét trở thành mốc nhật ký đầu tiên cùng giao dịch thêm cây.
-- Mục có cùng tên loài được gợi ý để mở cây cũ; không xác nhận cùng cá thể.
-
-Backend giới hạn kích thước yêu cầu, số lượt quét và xử lý từng lượt. API: `POST /identify`, JSON `{"imageBase64":"…"}`, header `Authorization: Bearer <SCAN_TOKEN>`. Phản hồi theo cấu trúc trong `server.mjs`. Không ghi khóa API/ảnh vào log.
-
-## Kiểm thử
+## Docker (tùy chọn)
 
 ```powershell
-node --test
+docker compose up -d --build
+# Đổi .env sau khi đã chạy:
+docker compose up -d --force-recreate
+docker compose logs --tail=30
+docker compose down
 ```
 
-Các kiểm thử dùng mô hình giả lập qua dependency injection: kiểm tra xác thực, ảnh không hợp lệ, dữ liệu quá lớn, schema và lỗi provider; không gọi AI hoặc phát sinh phí. Chất lượng nhận diện thực tế cần đánh giá sau khi cấu hình dịch vụ.
+compose.yaml chỉ mở cổng máy chủ ở 127.0.0.1, mount volume garden-data vào /app/data để giữ SQLite. Không chạy Docker và Node trên cùng cổng đồng thời. Không dùng down -v nếu muốn giữ tài khoản/chat. Container/image không chứa .env; cấu hình truyền lúc chạy.
 
-Tài liệu chính thức: [Ảnh đầu vào](https://ai.google.dev/gemini-api/docs/image-understanding), [Structured Outputs](https://ai.google.dev/gemini-api/docs/structured-output).
+## API và quyền truy cập
 
-## Hướng dẫn từng bước cho Android Studio emulator
+| API | Công dụng |
+|---|---|
+| GET /health | Trạng thái cấu hình, không kiểm tra AI thật. |
+| GET /plants?q=... | Tìm danh mục, nếu ngoài danh mục dùng Gemini; AI cần Bearer SCAN_TOKEN. |
+| POST /identify | Ảnh JPEG base64; Bearer SCAN_TOKEN; trả gợi ý đã kiểm tra schema. |
+| POST /auth/register | Tạo tài khoản: name, username, password. |
+| POST /auth/login | Tên đăng nhập/mật khẩu → phiên. |
+| GET /auth/me | Đọc tài khoản từ X-Account-Session. |
+| POST /auth/logout | Thu hồi phiên X-Account-Session. |
+| GET /auth/backup/meta | Metadata bản ZIP của tài khoản theo X-Account-Session, hoặc null. |
+| PUT /auth/backup | ZIP tối đa 25 MB; cần session, Content-Type application/zip và X-Backup-Revision đã biết (0 nếu chưa có). Sai phiên bản trả 409, giữ bản cũ. |
+| GET /auth/backup | ZIP đầy đủ theo session; header X-Backup-Revision và X-Backup-Checksum SHA-256. |
+| GET /assistant | Hội thoại chưa hết hạn. |
+| POST /assistant | question và garden snapshot; trả lời từ log hoặc Gemini. |
+| DELETE /assistant | Xóa hội thoại trong namespace hiện tại. |
+| DELETE /garden | Xóa snapshot và hội thoại, không xóa Room trên điện thoại. |
 
-1. Mở Docker Desktop và đợi Docker chạy.
-2. Nhấn Windows + E, dán `D:\Hoc_Tap\VuonNha_1\VuonNha_1\backend` vào thanh địa chỉ, Enter.
-3. Gõ `powershell` vào thanh địa chỉ của cửa sổ thư mục, Enter.
-4. Chạy `notepad .env`. Điền bốn dòng sau (thay phần khóa bằng khóa mới của bạn):
+Assistant/garden dùng cơ chế token phát triển hiện tại và X-Garden-Key của bản cài. Khi có X-Account-Session hợp lệ, backend chọn namespace tài khoản thay khóa khách. Phiên sai không được âm thầm dùng như khách. Đây chưa là cơ chế xác thực/quota hoàn chỉnh cho toàn bộ API công khai.
 
-```env
-GEMINI_API_KEY=DAN_KHOA_GOOGLE_VAO_DAY
-GEMINI_MODEL=gemini-3.8-flash
-SCAN_TOKEN=vuonnha-local-2026
-PORT=8787
+- Tên đăng nhập 3–40 ký tự ASCII: chữ, số, dấu chấm/gạch dưới/gạch ngang; chuẩn hóa chữ thường. Tên hiển thị 1–80 ký tự; mật khẩu 10–128.
+- Mật khẩu scrypt + salt; session ngẫu nhiên, chỉ lưu hash ở backend, tối đa 7 ngày và 5 phiên/tài khoản.
+- Giới hạn body/ảnh, số lượt và tác vụ đang chạy; kiểm tra cấu trúc đầu vào/đầu ra. Không ghi khóa/ảnh vào log.
+- Tra cứu/nhận diện trả gợi ý AI, không phải kết quả tìm web có nguồn. Không suy đoán giống hoặc chiều cao hiện tại thành số đo thực.
+- Chat tối đa 48 giờ; snapshot giữ đến khi thay thế/xóa. Backend dọn chat khi chạy và lúc khởi động lại.
+
+## File quan trọng
+
+| File | Vai trò |
+|---|---|
+| server.mjs | HTTP và nhận diện ảnh; kết nối các API. |
+| accounts.mjs | SQLite tài khoản, scrypt và phiên. |
+| assistant.mjs | Snapshot, lịch sử, múi giờ, chat và TTL. |
+| plant-catalog.mjs | Danh mục ban đầu có nguồn: kim tiền, hồ điệp, trầu bà lá xẻ. |
+| plant-lookup.mjs | Danh mục trước, Gemini khi ngoài danh mục. |
+| provider-fetch.mjs, gemini-config.mjs | Timeout/thử lại giới hạn và cấu hình mô hình. |
+| *.test.mjs | Kiểm thử bằng provider được kiểm soát. |
+| data/accounts.sqlite, data/garden.sqlite | Dữ liệu thật cục bộ, Git bỏ qua; không xóa khi dọn file. |
+
+## Kiểm thử và phát hành
+
+```powershell
+node --test --test-isolation=none
 ```
 
-5. Ctrl + S, đóng Notepad. Không để file thành `.env.txt`.
-6. Trong PowerShell chạy `docker compose up -d --build`.
-7. Chạy `Invoke-RestMethod http://127.0.0.1:8787/health`. `ready: True` chỉ xác nhận cấu hình, chưa kiểm tra khóa với Google.
-8. Bản debug mới tự kết nối backend emulator; không nhập cấu hình trong app.
-9. Quét cây → đưa cây vào camera hoặc Chọn ảnh → nhận diện → đọc kết quả → Tiếp theo → sửa biểu mẫu và lưu.
+37 kiểm thử đạt trong lượt rà soát 16/10/2026, không gọi Gemini thật. Có ZIP tài khoản, phiên sai, cách ly tài khoản, dữ liệu qua restart và chống ghi đè bản cũ. Backend giữ ZIP dạng blob có giới hạn, không giải nén; Android kiểm tra archive khi khôi phục. Không coi kết quả là độ chính xác AI hoặc dịch vụ luôn sẵn sàng.
 
-Nếu đã chạy container trước khi đổi khóa, chạy lại `docker compose up -d --build --force-recreate`.
+Bảng backups trong accounts.sqlite giữ một ZIP/tài khoản, không hết hạn theo chat 48 giờ. Bản lưu không mã hóa đầu cuối, bảo vệ bằng phiên và quyền truy cập máy chủ. Cần sao lưu accounts.sqlite lẫn garden.sqlite bằng quy trình SQLite phù hợp. Chưa có xóa tài khoản/bản lưu hoặc quên mật khẩu; không quảng bá tạo tài khoản là dữ liệu không bao giờ mất.
 
-
-## Trợ lý và dữ liệu vườn
-Trợ lý dùng SQLite ở data/garden.sqlite; Docker giữ database trong volume garden-data. Thông tin vườn chỉ đồng bộ khi gửi câu hỏi. Hội thoại hết hạn trước 48 giờ; có API xóa theo từng bản cài. Xem [Thiết kế mới](../REDESIGN_2026_10.md) để biết dữ liệu, API và giới hạn triển khai. Không bật Billing hoặc Google Search tự động; kiến thức AI không đồng nghĩa tìm kiếm web.
+Trước phát hành cần HTTPS/hosting, xác thực và quota toàn bộ API, khôi phục/xóa tài khoản, bảo vệ bí mật, sao lưu database và theo dõi vận hành. Release Android hiện chưa có endpoint mặc định; SCAN_ENDPOINT chỉ chấp nhận HTTPS khi cấu hình build. Không đưa token debug chung hoặc khóa Gemini vào APK công khai.

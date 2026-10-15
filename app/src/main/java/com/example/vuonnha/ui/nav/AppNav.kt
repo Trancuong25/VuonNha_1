@@ -1,6 +1,14 @@
 package com.example.vuonnha.ui.nav
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import com.example.vuonnha.R
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -25,6 +33,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -48,20 +58,31 @@ import com.example.vuonnha.ui.settings.ScanSettingsCard
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.filled.ChatBubble
 import com.example.vuonnha.ui.assistant.AssistantScreen
+import com.example.vuonnha.ui.settings.AccountScreen
+import com.example.vuonnha.data.AccountSession
 
 private data class Dest(val route: String, val label: String, val icon: ImageVector, val iconSelected: ImageVector)
 
 private val DESTS = listOf(
-    Dest("plants", "Vườn nhà", Icons.Outlined.Home, Icons.Filled.Home),
+    Dest("plants", "Vườn Nhà", Icons.Outlined.Home, Icons.Filled.Home),
     Dest("calendar", "Chăm sóc", Icons.Outlined.CalendarMonth, Icons.Filled.CalendarMonth),
     Dest("assistant", "Trợ lý", Icons.Outlined.ChatBubbleOutline, Icons.Filled.ChatBubble),
     Dest("settings", "Cài đặt", Icons.Outlined.Settings, Icons.Filled.Settings),
 )
 
 @Composable fun AppNav() {
+    val account by AccountSession.user.collectAsStateWithLifecycle()
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val current = entry?.destination?.route
+    fun openTab(route: String) {
+        if (current == route) return
+        nav.navigate(route) {
+            popUpTo(nav.graph.findStartDestination().id) { saveState = false }
+            launchSingleTop = true
+            restoreState = false
+        }
+    }
     val ctx = LocalContext.current
     val scanHidden by ScanSettings.hiddenState.collectAsStateWithLifecycle()
     val scanVisible = !scanHidden
@@ -70,52 +91,44 @@ private val DESTS = listOf(
     val tasks by rvm.tasks.collectAsStateWithLifecycle()
     val due = tasks.count { it.daysLeft() <= 0 }
 
-    Scaffold(bottomBar = { if (current != "scan") {
+    Scaffold(bottomBar = { if (current != "scan" && current != "account") {
         Column {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
-            DESTS.forEachIndexed { index, d ->
-                if (index == 2 && scanVisible) {
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        FloatingActionButton(onClick = { nav.navigate("scan") { launchSingleTop = true } },
-                            modifier = Modifier.size(52.dp), containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary) {
-                            Icon(Icons.Outlined.DocumentScanner, "Quét cây bằng máy ảnh")
-                        }
-                        Text("Quét cây", Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall)
-                    }
-                }
+        Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
+            .navigationBarsPadding().selectableGroup().padding(horizontal = 8.dp)) {
+            DESTS.forEach { d ->
                 val selected = current == d.route ||
                     (d.route == "plants" && current?.startsWith("item/") == true) ||
                     (d.route == "plants" && (current == "reminders" || current == "weather")) ||
                     (d.route == "calendar" && (current == "journal" || current?.startsWith("journal/") == true))
-                NavigationBarItem(
-                    selected = selected,
-                    onClick = {
-                        nav.navigate(d.route) {
-                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    icon = {
+                val tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                Column(Modifier.weight(1f).selectable(selected = selected, role = Role.Tab, onClick = { openTab(d.route) })
+                    .padding(bottom = 12.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Box(Modifier.width(48.dp).height(3.dp).background(
+                        if (selected) tint else Color.Transparent, RoundedCornerShape(bottomStart = 3.dp, bottomEnd = 3.dp)))
+                    Spacer(Modifier.height(3.dp))
                         BadgedBox(badge = { if (d.route == "plants" && due > 0) Badge { Text("$due") } }) {
-                            Icon(if (selected) d.iconSelected else d.icon, d.label)
+                            when (d.route) {
+                                "plants" -> Icon(painterResource(R.drawable.nav_garden), null, Modifier.size(28.dp), tint = tint)
+                                "calendar" -> Icon(painterResource(R.drawable.nav_care), null, Modifier.size(28.dp), tint = tint)
+                                "assistant" -> Icon(painterResource(R.drawable.nav_assistant), null, Modifier.size(28.dp), tint = tint)
+                                else -> Icon(Icons.Outlined.Settings, null, Modifier.size(28.dp), tint = tint)
+                            }
                         }
-                    },
-                    label = { Text(d.label) }
-                )
+                    Text(d.label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, color = tint)
+                }
             }
         }
         }
     } }) { pad ->
         NavHost(nav, startDestination = "plants", modifier = Modifier.padding(pad)) {
-            composable("reminders") { RemindersScreen(onCalendar = { nav.navigate("calendar") }) }
+            composable("reminders") { RemindersScreen(onCalendar = { openTab("calendar") }) }
             composable("plants") { PlantsScreen(onOpen = { nav.navigate("item/$it") },
-                onCalendar = { nav.navigate("calendar") }, onWeather = { nav.navigate("weather") },
-                onReminders = { nav.navigate("reminders") }, onScan = { nav.navigate("scan") }) }
-            composable("calendar") { CareCalendarScreen({ nav.navigate("plants") { popUpTo("plants"); launchSingleTop = true } }, { nav.navigate("item/$it") }, onJournal = { nav.navigate("journal") }) }
-            composable("assistant") { AssistantScreen() }
+                onCalendar = { openTab("calendar") }, onWeather = { nav.navigate("weather") },
+                onReminders = { nav.navigate("reminders") }, onScan = { nav.navigate("scan") }, onAccount = { nav.navigate("account") }) }
+            composable("calendar") { CareCalendarScreen({ openTab("plants") }, { nav.navigate("item/$it") }, onJournal = { nav.navigate("journal") }) }
+            composable("assistant") { androidx.compose.runtime.key(account?.id) { AssistantScreen(vm = viewModel(key = "assistant-${account?.id ?: "guest"}")) } }
             composable("item/{itemId}") { backStack ->
                 val id = backStack.arguments?.getString("itemId")?.toLongOrNull()
                 if (id != null) ItemDetailScreen(id, { nav.popBackStack() }, { nav.navigate("journal/$id") })
@@ -125,7 +138,8 @@ private val DESTS = listOf(
             }
             composable("weather") { WeatherScreen(onBack = { nav.popBackStack() }) }
             composable("journal") { JournalScreen() }
-            composable("settings") { SettingsScreen() }
+            composable("settings") { SettingsScreen(onAccount = { nav.navigate("account") }) }
+            composable("account") { AccountScreen(onBack = { nav.popBackStack() }) }
             composable("scan") { PlantScanScreen({ nav.popBackStack() }, { id -> nav.popBackStack(); nav.navigate("item/$id") }) }
         }
     }

@@ -14,6 +14,13 @@ async function running(t, config) {
   return `http://127.0.0.1:${server.address().port}`;
 }
 const headers = { authorization: 'Bearer test-token', 'content-type': 'application/json' };
+test('provider outage and timeout remain distinct without exposing provider details',async t=>{
+ for(const [expected,name] of [[503,'Error'],[504,'TimeoutError']]) {
+  const url=await running(t,{apiKey:'test-only',model:'test-model',token:'test-token',recognizeImpl:async()=>{const e=new Error('private-provider-details');e.name=name;if(expected===503)e.httpStatus=503;throw e;}});
+  const response=await fetch(`${url}/identify`,{method:'POST',headers,body:JSON.stringify({imageBase64:photo})});
+  assert.equal(response.status,expected);assert.deepEqual(await response.json(),{error:'scan-failed'});
+ }
+});
 
 test('authenticated scan returns validated candidates', async t => {
   let called = 0;

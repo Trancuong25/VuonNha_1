@@ -11,6 +11,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -89,7 +93,13 @@ fun CareCalendarScreen(onBack: () -> Unit, onOpen: (Long) -> Unit, vm: Reminders
                                 val notes = notesByDay[date].orEmpty().size
                                 Surface(
                                     modifier = Modifier.weight(1f).heightIn(min = 64.dp).padding(2.dp)
-                                        .clickable(enabled = inRange) { selectedDay = date.toEpochDay(); scope.launch { listState.animateScrollToItem(2) } },
+                                        .semantics(mergeDescendants = true) {
+                                            if (inRange) {
+                                                contentDescription = "Ngày ${date.format(fmt)}${if (date == today) ", hôm nay" else ""}, $count việc theo lịch, $completed lượt đã làm, $notes ghi chú"
+                                                this.selected = date == selected
+                                            }
+                                        }
+                                        .clickable(enabled = inRange, role = Role.Button) { selectedDay = date.toEpochDay(); scope.launch { listState.animateScrollToItem(2) } },
                                     shape = MaterialTheme.shapes.small,
                                     color = if (date == selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
                                 ) {

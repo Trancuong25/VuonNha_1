@@ -4,7 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { lookupPlants } from './plant-catalog.mjs';
 import { lookupOnline, validateProfiles } from './plant-lookup.mjs';
 import { createGardenStore, createAssistantHandler } from './assistant.mjs';
-import { providerFetch } from './provider-fetch.mjs';
+import { providerFetch, providerErrorStatus } from './provider-fetch.mjs';
+import { mobileGenerationConfig } from './gemini-config.mjs';
+import { createAccountStore, createAccountHandler } from './accounts.mjs';
 
 const schema = {
   type: 'object', additionalProperties: false,
@@ -58,13 +60,13 @@ export async function recognize(imageBase64, { apiKey, model, fetchImpl = provid
         { text: 'Đề xuất cây trong ảnh và giải thích đặc điểm nhận dạng.' },
         { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } }
       ] }],
-      generationConfig: { responseMimeType: 'application/json', responseJsonSchema: schema,
-        maxOutputTokens: 2500 }
+      generationConfig: mobileGenerationConfig(model, { responseMimeType: 'application/json', responseJsonSchema: schema,
+        maxOutputTokens: 2500 })
     })
   });
   if (!response.ok) {
     const error = new Error('provider-error');
-    error.httpStatus = response.status === 429 ? 429 : 502;
+    error.httpStatus = providerErrorStatus({httpStatus:response.status});
     throw error;
   }
   const data = await response.json();
@@ -74,8 +76,10 @@ export async function recognize(imageBase64, { apiKey, model, fetchImpl = provid
   return validateResult(JSON.parse(text));
 }
 
-export function createScanServer({ apiKey, model, token, recognizeImpl = recognize, lookupImpl = lookupOnline, gardenStore, askImpl }) {
+export function createScanServer({ apiKey, model, token, recognizeImpl = recognize, lookupImpl = lookupOnline, gardenStore, askImpl, accountStore }) {
   const store = gardenStore || createGardenStore();
+  const accounts = accountStore || createAccountStore();
+  const accountHandler = createAccountHandler(accounts);
   const assistant = createAssistantHandler({ store, apiKey, model, askImpl });
   let active = false;
   let windowStart = Date.now();
@@ -83,7 +87,13 @@ export function createScanServer({ apiKey, model, token, recognizeImpl = recogni
   const server = http.createServer(async (req, res) => {
     const send = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); };
     if (req.method === 'GET' && req.url === '/health') return send(200, { ready: Boolean(apiKey && model && token) });
+    if (req.url?.startsWith('/auth/')) return accountHandler(req, send, res);
     if (req.url === '/assistant' || req.url === '/garden') {
+      if (req.headers['x-account-session'] !== undefined) {
+        const account = accounts.resolve(req.headers['x-account-session']);
+        if (!account) return send(401, { error: 'session-expired' });
+        req.headers['x-garden-key'] = account.gardenKey;
+      }
       const expected = Buffer.from(`Bearer ${token ?? ''}`);
       const provided = Buffer.from(req.headers.authorization ?? '');
       if (!token || expected.length !== provided.length || !timingSafeEqual(expected, provided)) return send(401, { error: 'unauthorized' });
@@ -104,7 +114,7 @@ export function createScanServer({ apiKey, model, token, recognizeImpl = recogni
       try {
         const plants = validateProfiles({ plants: await lookupImpl(query, { apiKey, model }) });
         return send(200, { plants, sourceType: 'ai-suggestion' });
-      } catch (error) { return send(error.httpStatus === 429 ? 429 : 502, { error: 'lookup-failed' }); }
+      } catch (error) { return send(providerErrorStatus(error), { error: 'lookup-failed' }); }
       finally { active = false; }
     }
     if (req.method !== 'POST' || req.url !== '/identify') return send(404, { error: 'not-found' });
@@ -134,18 +144,20 @@ export function createScanServer({ apiKey, model, token, recognizeImpl = recogni
       try { send(200, validateResult(await recognizeImpl(image, { apiKey, model }))); }
       finally { active = false; }
     } catch (error) {
-      if (!res.writableEnded) send(error.httpStatus === 429 ? 429 : 502, { error: 'scan-failed' });
+      if (!res.writableEnded) send(providerErrorStatus(error), { error: 'scan-failed' });
     }
   });
   if (!gardenStore) server.on('close', () => store.close());
+  if (!accountStore) server.on('close', () => accounts.close());
   return server;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { GEMINI_API_KEY: apiKey, GEMINI_MODEL: configuredModel, SCAN_TOKEN: token } = process.env;
-  const model = configuredModel || 'gemini-3.8-flash';
+  const model = configuredModel || 'gemini-3.1-flash-lite';
   const gardenStore = createGardenStore(process.env.GARDEN_DB || './data/garden.sqlite');
-  const server = createScanServer({ apiKey, model, token, gardenStore });
+  const accountStore = createAccountStore(process.env.ACCOUNT_DB || './data/accounts.sqlite');
+  const server = createScanServer({ apiKey, model, token, gardenStore, accountStore });
   server.requestTimeout = 60000;
   const port = Number(process.env.PORT || 8787);
   const host = process.env.HOST || '127.0.0.1';

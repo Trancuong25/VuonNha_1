@@ -18,8 +18,27 @@ class GardenNavigationTest {
   File(compose.activity.getExternalFilesDir(null),name).outputStream().use{bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}
   bitmap.recycle()
  }
+ @Test fun accountCanOpenFromHomeAndReturnWithoutLogin() {
+  compose.onNodeWithContentDescription("Tài khoản").performClick()
+  compose.onNodeWithText("Tên đăng nhập",substring=false).assertExists()
+  screenshot("account-screen.png")
+  compose.onNodeWithText("‹ Quay lại").performClick()
+  compose.onAllNodesWithText("Vườn Nhà",substring=false).onFirst().assertExists()
+ }
+ @Test fun calendarShortcutAndCareTabAlwaysAllowReturningHome() {
+  repeat(3) {
+   compose.onNodeWithText("Lịch chăm sóc",substring=false).performClick()
+   compose.onNodeWithText("＋ Ghi chú hoặc ảnh phát triển").assertExists()
+   compose.onNode(hasText("Vườn Nhà") and hasClickAction()).performClick()
+   compose.onNodeWithText("Thêm cây vào vườn",substring=false).assertExists()
+   compose.onNode(hasText("Chăm sóc") and hasClickAction()).performClick()
+   compose.onNodeWithText("＋ Ghi chú hoặc ảnh phát triển").assertExists()
+   compose.onNode(hasText("Vườn Nhà") and hasClickAction()).performClick()
+   compose.onNodeWithText("Thêm cây vào vườn",substring=false).assertExists()
+  }
+ }
  @Test fun navigationScreensAreAccessibleWithoutSendingChat() {
-  compose.onAllNodesWithText("Vườn nhà",substring=false).onFirst().assertExists()
+  compose.onAllNodesWithText("Vườn Nhà",substring=false).onFirst().assertExists()
   screenshot("redesign-home.png")
   compose.onNode(hasText("Chăm sóc") and hasClickAction()).performClick()
   compose.onNodeWithText("＋ Ghi chú hoặc ảnh phát triển").assertExists()

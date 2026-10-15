@@ -28,6 +28,7 @@ class RecognitionFlowTest {
         compose.onNodeWithText("Kết quả nhận diện").assertExists()
         compose.onNodeWithText("Tiếp theo").performClick()
         compose.onNodeWithText("Kết quả nhận diện").assertDoesNotExist()
+        compose.onNodeWithText("Thông tin bổ sung về cây").performScrollTo().performClick()
         compose.onNodeWithText("Tên khoa học / loài").performScrollTo().assertExists()
         compose.onNodeWithText("‹ Quay lại kết quả").performScrollTo().performClick()
         compose.onNodeWithText("Kết quả nhận diện").assertExists()
@@ -43,8 +44,11 @@ class RecognitionFlowTest {
                 nickname = name; profile = species.profileJson; speciesId = species.id
             }
         } }
+        compose.onNodeWithText("Tiếp tục").performClick()
         compose.onNodeWithText("Tên gọi riêng (không bắt buộc)").performScrollTo().performTextReplacement("Bé Lá")
-        compose.onNode(hasText("Thêm vào vườn") and hasClickAction()).performScrollTo().performClick()
+        compose.onNodeWithText("Tiếp tục").performClick()
+        compose.onNode(hasText("Thêm vào vườn") and hasClickAction()).performClick()
+  compose.onNodeWithText("Xác nhận lưu").performClick()
         compose.runOnIdle {
             assertEquals("Bé Lá", nickname)
             assertTrue(requireNotNull(profile).contains("Zamioculcas zamiifolia"))
@@ -62,8 +66,10 @@ class RecognitionFlowTest {
             compose.onNodeWithText("🐟 Cá cảnh").performScrollTo().performClick()
             compose.onNodeWithText("🪴 Cây cảnh").performScrollTo().performClick()
         }
+        compose.onNodeWithText("Tiếp tục").performClick()
         compose.onNodeWithText("Tên gọi riêng (không bắt buộc)").performScrollTo().performClick().performTextReplacement("Chậu bàn học")
         androidx.test.espresso.Espresso.closeSoftKeyboard()
-        compose.onNode(hasText("Thêm vào vườn") and hasClickAction()).performScrollTo().assertIsEnabled()
+        compose.onNodeWithText("Tiếp tục").performClick()
+        compose.onNode(hasText("Thêm vào vườn") and hasClickAction()).assertIsEnabled()
     }
 }

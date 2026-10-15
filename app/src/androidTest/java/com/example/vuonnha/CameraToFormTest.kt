@@ -24,12 +24,18 @@ class CameraToFormTest {
         repeat(3) { index ->
             compose.onNodeWithText("Tên loài hoặc mô tả *").performScrollTo().performClick().performTextReplacement("Cây $index")
             androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.onNodeWithText("Tiếp tục").performClick()
             compose.onNodeWithText("Tên gọi riêng (không bắt buộc)").performScrollTo().performClick().performTextClearance()
             shellOutput("input text Chau$index")
             compose.onNodeWithText("Chau$index").assertExists()
             androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.onNodeWithText("Quay lại",substring=false).performClick()
         }
-        compose.onNode(hasText("Thêm vào vườn") and hasClickAction()).performScrollTo().assertIsEnabled()
+        compose.onNodeWithText("Tiếp tục").performClick()
+        compose.onNodeWithText("Tiếp tục").performClick()
+        compose.onNode(hasText("Thêm vào vườn") and hasClickAction()).assertIsEnabled()
+        compose.onNodeWithText("Quay lại",substring=false).performClick()
+        compose.onNodeWithText("Quay lại",substring=false).performClick()
         compose.onNodeWithText("‹ Quay lại máy ảnh").performScrollTo().performClick()
         compose.onNodeWithText("Quét cây").assertExists()
     }

@@ -29,6 +29,7 @@ class CalendarDiaryTest {
    }
    compose.setContent{VuonNhaTheme{CareCalendarScreen({}, {})}}
    compose.waitForIdle()
+   compose.onNodeWithContentDescription("Ngày ${today.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))}, hôm nay", substring = true).assertIsSelected()
    compose.onNodeWithTag("care-calendar").performScrollToNode(hasText("Lá mới ngày hiện tại"))
    compose.onNodeWithText("Lá mới ngày hiện tại").assertExists()
    compose.onNodeWithText("Ghi chú riêng ngày khác").assertDoesNotExist()

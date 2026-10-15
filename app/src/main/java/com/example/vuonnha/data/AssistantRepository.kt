@@ -36,6 +36,7 @@ class AssistantRepository(private val context: Context) {
             connection.instanceFollowRedirects = false
             connection.setRequestProperty("Authorization", "Bearer ${BuildConfig.SCAN_TOKEN}")
             connection.setRequestProperty("X-Garden-Key", credential())
+            AccountSession.credential(context)?.let { connection.setRequestProperty("X-Account-Session", it) }
             if (body != null) {
                 connection.doOutput = true; connection.setRequestProperty("Content-Type", "application/json")
                 val bytes = body.toString().toByteArray(Charsets.UTF_8)
@@ -46,13 +47,15 @@ class AssistantRepository(private val context: Context) {
             check(connection.responseCode == 200) { when (connection.responseCode) {
                 429 -> "Trợ lý đang bận hoặc hết hạn mức. Bạn thử lại sau nhé."
                 503 -> "Trợ lý AI chưa sẵn sàng. Câu hỏi về việc đã làm vẫn dùng được khi backend kết nối."
-                401 -> "Chưa kết nối được Trợ lý. Hãy thử lại sau."
+                504 -> "Dịch vụ AI phản hồi chậm. Hãy thử lại sau; nội dung câu hỏi vẫn được giữ."
+                401 -> "Phiên truy cập Trợ lý chưa hợp lệ. Hãy mở Tài khoản để đăng nhập lại."
                 else -> "Trợ lý chưa trả được câu trả lời. Hãy thử lại sau."
             } }
             val data = JSONObject(String(connection.inputStream.use { it.readBackupBytes(800000) }, Charsets.UTF_8))
             val messages = data.optJSONArray("messages") ?: JSONArray()
             (0 until messages.length()).map { i -> messages.getJSONObject(i).let { ChatMessage(it.getString("role"), it.getString("text"), it.getLong("at")) } }
-        } catch (e: java.io.IOException) { error("Không kết nối được Trợ lý. Vườn và lịch chăm sóc vẫn lưu trên máy.") }
+        } catch (e: java.net.SocketTimeoutException) { error("Trợ lý phản hồi chậm. Bạn có thể thử lại; câu hỏi vẫn được giữ.") }
+        catch (e: java.io.IOException) { error("Không kết nối được Trợ lý. Vườn và lịch chăm sóc vẫn lưu trên máy.") }
         finally { connection.disconnect() }
     }
 }

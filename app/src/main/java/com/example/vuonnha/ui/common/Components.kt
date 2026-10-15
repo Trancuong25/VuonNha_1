@@ -17,6 +17,21 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Brush
+
+/** A distinct wordmark; body text keeps the regular, readable sans-serif face. */
+@Composable fun GardenWordmark() {
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Text("Vườn Nhà", style = MaterialTheme.typography.headlineMedium.copy(
+            fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold,
+            fontSize = 28.sp, lineHeight = 34.sp, letterSpacing = (-0.5).sp),
+            color = MaterialTheme.colorScheme.primary)
+        Box(Modifier.width(44.dp).height(3.dp).clip(CircleShape).background(
+            Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primaryContainer))))
+    }
+}
 
 @Composable fun ScreenHeader(title: String, subtitle: String? = null, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth().padding(top = 12.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

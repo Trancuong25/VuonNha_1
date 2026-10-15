@@ -20,7 +20,8 @@ class PlantLookupRepository {
             if (BuildConfig.SCAN_TOKEN.isNotBlank()) conn.setRequestProperty("Authorization", "Bearer ${BuildConfig.SCAN_TOKEN}")
             check(conn.responseCode==200) { when(conn.responseCode) {
                 429 -> "API đang hết hạn mức hoặc bận. Hãy thử lại sau; bạn vẫn có thể tự nhập."
-                503 -> "Backend chưa cấu hình dịch vụ tra cứu AI."
+                503 -> "Dịch vụ tra cứu AI tạm thời chưa sẵn sàng. Bạn vẫn có thể tự nhập tên cây."
+                504 -> "Tra cứu đang mất nhiều thời gian. Hãy thử lại sau hoặc tự nhập."
                 401 -> "Ứng dụng chưa được backend cho phép tra cứu."
                 else -> "Dịch vụ AI chưa trả được kết quả. Hãy thử lại sau."
             } }
@@ -32,7 +33,8 @@ class PlantLookupRepository {
                 PlantProfile(p.getString("name"), listOf("scientificName","matureHeight","humidity","soil","light","source").associateWith { p.optString(it) },
                     (0 until tasks.length()).map { n -> tasks.getJSONObject(n).let { it.getString("name") to it.getInt("everyDays").also { d -> require(d in 1..365) } } })
             }
-        } catch(e: java.io.IOException) { error("Không kết nối được danh mục cây. Bạn vẫn có thể tự nhập.") }
+        } catch(e: java.net.SocketTimeoutException) { error("Tra cứu phản hồi chậm. Bạn vẫn có thể tự nhập tên cây.") }
+        catch(e: java.io.IOException) { error("Không kết nối được danh mục cây. Bạn vẫn có thể tự nhập.") }
         finally { conn.disconnect() }
     }
 }

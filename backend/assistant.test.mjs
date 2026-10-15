@@ -1,14 +1,29 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createGardenStore,sanitizeGarden,answerHistory} from './assistant.mjs';
+import {createGardenStore,sanitizeGarden,answerHistory,askGarden} from './assistant.mjs';
+import {mobileGenerationConfig} from './gemini-config.mjs';
 import {createScanServer} from './server.mjs';
 const now=Date.parse('2026-10-11T04:00:00Z');
 const garden={plants:[{id:1,name:'Bé Lá',species:'Kim tiền',location:'Ban công',profile:{light:'Gián tiếp',junk:'remove'},tasks:[{name:'Tưới',everyDays:7,lastDone:now}]}],logs:[{itemId:1,task:'Tưới nước',at:now-86400000}]};
+test('mobile chat limits modern model effort and never displays thought parts',async()=>{
+ const answer=await askGarden('Hỏi chăm cây',garden,[],{apiKey:'test-only',model:'gemini-3.8-flash',fetchImpl:async(_,options)=>{
+  assert.equal(JSON.parse(options.body).generationConfig.thinkingConfig.thinkingLevel,'low');
+  return new Response(JSON.stringify({candidates:[{finishReason:'STOP',content:{parts:[{thought:true,text:'hidden'},{text:'Gợi ý ngắn'}]}}]}));
+ }});
+ assert.equal(answer,'Gợi ý ngắn');
+});
+test('older and image models do not receive unsupported thinking-level settings',()=>{
+ for(const model of ['gemini-2.5-flash','gemini-3.1-flash-lite-image'])assert.equal(mobileGenerationConfig(model,{maxOutputTokens:1500}).thinkingConfig,undefined);
+});
 test('garden whitelist removes photos, notes and unrelated fields',()=>{const g=sanitizeGarden({...garden,photo:'private',note:'private'});assert.equal(g.plants[0].profile.junk,undefined);assert.equal(g.photo,undefined);assert.equal(g.note,undefined);});
 test('history uses actual log, never schedule baseline',()=>{assert.match(answerHistory('Hôm qua tôi tưới cây nào?',garden,now),/Bé Lá: Tưới nước/);assert.match(answerHistory('Hôm nay đã chăm sóc cây nào?',garden,now),/Chưa có ghi nhận/);});
 test('planned care questions are not mistaken for completed care',()=>{
  assert.equal(answerHistory('Hôm nay tôi cần tưới cây nào?',garden,now),null);
  assert.equal(answerHistory('Hôm nay nên bón phân gì cho kim tiền?',garden,now),null);
+});
+test('multi-day and uncompleted-care questions are not answered as completed history',()=>{
+ assert.equal(answerHistory('So sánh hôm qua và hôm nay tôi đã tưới cây nào?',garden,now),null);
+ assert.equal(answerHistory('Hôm nay cây nào chưa được tưới?',garden,now),null);
 });
 test('history filters the requested plant and only actual watering or fertilizing tasks',()=>{
  const other={...garden.plants[0],id:2,name:'Chậu cửa sổ',species:'Trầu bà'};

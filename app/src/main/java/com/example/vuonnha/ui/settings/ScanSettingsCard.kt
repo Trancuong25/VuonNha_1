@@ -15,7 +15,7 @@ fun ScanSettingsCard() {
     val ctx = LocalContext.current
     var visible by remember { mutableStateOf(!ScanSettings.hidden(ctx)) }
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        ListItem(headlineContent = { Text("Nút quét cây") }, supportingContent = { Text("Hiển thị trên thanh điều hướng") },
+        ListItem(headlineContent = { Text("Nút quét cây") }, supportingContent = { Text("Hiển thị trong Tiện ích ở Vườn Nhà") },
             trailingContent = { Switch(visible, { visible = it; ScanSettings.hide(ctx, !it) }) })
     }
 }
