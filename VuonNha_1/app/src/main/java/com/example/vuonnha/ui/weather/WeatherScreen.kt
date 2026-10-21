@@ -29,7 +29,7 @@ private fun dayLabel(d: String, i: Int) = when (i) {
     0 -> "Hôm nay"; 1 -> "Ngày mai"; else -> runCatching { OUT.format(IN.parse(d)!!) }.getOrDefault(d)
 }
 
-@Composable fun WeatherScreen(vm: WeatherViewModel = viewModel()) {
+@Composable fun WeatherScreen(vm: WeatherViewModel = viewModel(), onBack: (() -> Unit)? = null) {
     val weather by vm.weather.collectAsStateWithLifecycle()
     val place by vm.place.collectAsStateWithLifecycle()
     val items by vm.items.collectAsStateWithLifecycle()
@@ -45,10 +45,13 @@ private fun dayLabel(d: String, i: Int) = when (i) {
     }
 
     LazyColumn(
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item { ScreenHeader("Thời tiết", place?.name ?: "Chưa chọn vị trí") }
+        item {
+            onBack?.let { TextButton(it) { Text("‹ Vườn nhà") } }
+            ScreenHeader("Thời tiết", place?.name ?: "Chưa chọn vị trí")
+        }
         if (place == null || changing) item {
             LocationCard(vm, onCurrent = { permLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }, onPicked = { changing = false })
         }

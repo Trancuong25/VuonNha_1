@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 class ReminderActionReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
         val action = intent.action ?: return
+        if (action != Notifications.ACTION_DONE && action != Notifications.ACTION_SNOOZE) return
         val app = ctx.applicationContext
         // Chỉ xử lý đúng các việc đã hiện trong thông báo (tránh đánh dấu nhầm việc khác).
         val ids = intent.getLongArrayExtra(Notifications.EXTRA_IDS)?.toSet() ?: emptySet()

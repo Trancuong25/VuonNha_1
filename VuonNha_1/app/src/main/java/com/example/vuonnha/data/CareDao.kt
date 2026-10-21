@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao interface CareDao {
     @Query("SELECT * FROM Item ORDER BY id DESC") fun items(): Flow<List<Item>>
     @Query("SELECT * FROM Item") suspend fun itemsOnce(): List<Item>
+    @Query("SELECT * FROM Item WHERE id=:id") suspend fun itemOnce(id: Long): Item?
     @Insert suspend fun insertItem(i: Item): Long
     @Update suspend fun updateItem(i: Item)
     @Query("DELETE FROM Item WHERE id=:id") suspend fun deleteItem(id: Long)
@@ -20,6 +21,8 @@ import kotlinx.coroutines.flow.Flow
 
     @Query("SELECT * FROM CareTask") fun tasks(): Flow<List<CareTask>>
     @Query("SELECT * FROM CareTask") suspend fun tasksOnce(): List<CareTask>
+    @Query("SELECT * FROM CareTask WHERE id=:id") suspend fun taskOnce(id: Long): CareTask?
+    @Query("UPDATE CareTask SET everyDays=:days WHERE id=:id") suspend fun updateCycle(id: Long, days: Int)
     @Insert suspend fun insertTasks(t: List<CareTask>)
     @Insert suspend fun insertTask(t: CareTask): Long
     @Update suspend fun updateTask(t: CareTask)

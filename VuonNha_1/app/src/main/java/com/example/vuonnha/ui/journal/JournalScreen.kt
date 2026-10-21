@@ -1,6 +1,7 @@
 package com.example.vuonnha.ui.journal
 
 import android.content.Context
+import android.content.ActivityNotFoundException
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -51,16 +52,20 @@ private fun newCameraUri(ctx: Context): Uri {
 }
 
 @OptIn(ExperimentalLayoutApi::class)
-@Composable fun JournalScreen(vm: JournalViewModel = viewModel()) {
+@Composable fun JournalScreen(vm: JournalViewModel = viewModel(), initialItemId: Long? = null) {
     val appCtx = LocalContext.current
     val items by vm.items.collectAsStateWithLifecycle()
     val diary by vm.diary.collectAsStateWithLifecycle()
     val logs by vm.logs.collectAsStateWithLifecycle()
-    var selId by remember { mutableStateOf<Long?>(null) }
-    var note by remember { mutableStateOf("") }
+    val saving by vm.saving.collectAsStateWithLifecycle()
+    val error by vm.error.collectAsStateWithLifecycle()
+    var selId by rememberSaveable(initialItemId) { mutableStateOf(initialItemId) }
+    var note by rememberSaveable { mutableStateOf("") }
     var picked by rememberSaveable { mutableStateOf<Uri?>(null) }
     var camUri by rememberSaveable { mutableStateOf<Uri?>(null) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { picked = it }
+    var cameraError by remember { mutableStateOf<String?>(null) }
+    var deleting by remember { mutableStateOf<DiaryEntry?>(null) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { if (it != null) picked = it }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         if (ok) picked = camUri
         camUri = null
@@ -70,7 +75,7 @@ private fun newCameraUri(ctx: Context): Uri {
     if (cur == null) {
         Column(Modifier.padding(16.dp)) {
             ScreenHeader("Nhật ký")
-            EmptyState("📸", "Chưa có gì để ghi", "Thêm cây hoặc thú cưng ở tab Vườn để bắt đầu theo dõi sự lớn lên.")
+            EmptyState("📸", "Chưa có gì để ghi", "Thêm cây hoặc thú cưng ở Vườn nhà để bắt đầu theo dõi sự lớn lên.")
         }
         return
     }
@@ -80,15 +85,15 @@ private fun newCameraUri(ctx: Context): Uri {
     val photos = remember(entries) { entries.filter { it.photoUri.isNotEmpty() } }
 
     LazyColumn(
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item { ScreenHeader("Nhật ký", "Ghi lại từng mốc phát triển") }
+        item { ScreenHeader("Nhật ký", "Một chiếc lá mới, một lần ra hoa — lưu lại ở đây") }
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(items, key = { it.id }) { i ->
                     FilterChip(
-                        selected = i.id == cur.id, onClick = { selId = i.id },
+                        selected = i.id == cur.id, enabled = !saving, onClick = { selId = i.id },
                         label = { Text("${findSpecies(i.speciesId)?.emoji ?: "🌿"} ${i.name}") }
                     )
                 }
@@ -99,25 +104,32 @@ private fun newCameraUri(ctx: Context): Uri {
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Thêm mốc mới", style = MaterialTheme.typography.titleMedium)
-                    OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth(), label = { Text("Ghi chú (VD: ra lá mới)") })
+                    OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth(), enabled = !saving, label = { Text("Ghi chú (VD: ra lá mới)") })
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        OutlinedButton({ picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
+                        OutlinedButton({ picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !saving) {
                             Icon(Icons.Outlined.AddPhotoAlternate, null); Spacer(Modifier.width(6.dp)); Text(if (picked == null) "Chọn ảnh" else "Đổi ảnh")
                         }
                         OutlinedButton({
                             val u = newCameraUri(appCtx)
                             camUri = u
-                            camera.launch(u)
-                        }) {
+                            cameraError = null
+                            try { camera.launch(u) }
+                            catch (e: ActivityNotFoundException) {
+                                camUri = null
+                                cameraError = "Thiết bị chưa có ứng dụng camera. Bạn có thể chọn ảnh từ thư viện."
+                            }
+                        }, enabled = !saving) {
                             Icon(Icons.Outlined.PhotoCamera, null); Spacer(Modifier.width(6.dp)); Text("Chụp ảnh")
                         }
-                        if (picked != null) AssistChip(onClick = { picked = null }, label = { Text("Đã chọn 1 ảnh · bỏ") })
+                        if (picked != null) AssistChip(enabled = !saving, onClick = { picked = null }, label = { Text("Đã chọn 1 ảnh · bỏ") })
                     }
                     Button(
-                        enabled = picked != null || note.isNotBlank(),
-                        onClick = { vm.addEntry(cur.id, note.trim(), picked); note = ""; picked = null },
+                        enabled = !saving && (picked != null || note.isNotBlank()),
+                        onClick = { vm.addEntry(cur.id, note.trim(), picked) { note = ""; picked = null } },
                         modifier = Modifier.fillMaxWidth().height(48.dp)
-                    ) { Text("Lưu vào nhật ký") }
+                    ) { Text(if (saving) "Đang lưu…" else "Lưu vào nhật ký") }
+                    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    cameraError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             }
         }
@@ -130,7 +142,16 @@ private fun newCameraUri(ctx: Context): Uri {
             }
         }
         if (entries.isEmpty()) item { EmptyState("🌱", "Chưa có mốc nào", "Chọn ảnh đầu tiên để theo dõi sự lớn lên.") }
-        items(entries, key = { it.id }) { e -> EntryCard(e) { vm.removeEntry(e) } }
+        items(entries, key = { it.id }) { e -> EntryCard(e) { deleting = e } }
+    }
+    deleting?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Xoá mốc nhật ký?") },
+            text = { Text("Ảnh và ghi chú của mốc này sẽ bị xoá.") },
+            confirmButton = { TextButton({ vm.removeEntry(entry); deleting = null }) { Text("Xoá") } },
+            dismissButton = { TextButton({ deleting = null }) { Text("Huỷ") } }
+        )
     }
 }
 

@@ -1,0 +1,13 @@
+# Root-level gitignore — d:\Hoc_Tap\VuonNha_1\
+# Các file tạm, log và artifact debug sinh ra ở thư mục làm việc ngoài project.
+# (Android project gitignore nằm trong VuonNha_1/.gitignore)
+
+# Log backend và emulator
+*.log
+
+# ANR trace (debug artifact, không cần theo dõi)
+anr-*.txt
+
+# IDE local
+.idea/deviceManager.xml
+.idea/vcs.xml

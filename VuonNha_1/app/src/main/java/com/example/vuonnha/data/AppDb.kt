@@ -5,7 +5,7 @@ import androidx.room.*
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [Item::class, CareTask::class, CareLog::class, DiaryEntry::class, Zone::class], version = 4, exportSchema = false)
+@Database(entities = [Item::class, CareTask::class, CareLog::class, DiaryEntry::class, Zone::class], version = 5, exportSchema = false)
 abstract class AppDb : RoomDatabase() {
     abstract fun dao(): CareDao
 
@@ -58,9 +58,14 @@ abstract class AppDb : RoomDatabase() {
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_${table}_itemId` ON `$table` (`itemId`)")
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `Item` ADD COLUMN `profileJson` TEXT NOT NULL DEFAULT ''")
+            }
+        }
         fun get(c: Context): AppDb = inst ?: synchronized(this) {
             inst ?: Room.databaseBuilder(c.applicationContext, AppDb::class.java, "vuonnha.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { inst = it }
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { inst = it }
         }
     }
 }

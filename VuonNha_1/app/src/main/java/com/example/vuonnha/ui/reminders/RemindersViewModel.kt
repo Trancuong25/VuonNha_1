@@ -15,6 +15,8 @@ class RemindersViewModel(app: Application) : AndroidViewModel(app) {
     val items = repo.items.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val tasks = repo.tasks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val zones = repo.zones.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val logs = repo.logs.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val diary = repo.diary.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val weather = WeatherRepository.state
 
     fun done(t: CareTask) = viewModelScope.launch { repo.done(t) }

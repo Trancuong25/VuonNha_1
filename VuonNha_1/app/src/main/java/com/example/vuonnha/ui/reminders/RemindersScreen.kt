@@ -26,7 +26,7 @@ import kotlin.math.roundToInt
 /** Ngữ cảnh dùng chung cho các thẻ việc: cây, khu vực và dự báo của hôm nay. */
 private class Ctx(val items: Map<Long, Item>, val zones: Map<Long, Zone>, val fc: DayForecast?)
 
-@Composable fun RemindersScreen(vm: RemindersViewModel = viewModel()) {
+@Composable fun RemindersScreen(vm: RemindersViewModel = viewModel(), onCalendar: () -> Unit = {}) {
     val tasks by vm.tasks.collectAsStateWithLifecycle()
     val items by vm.items.collectAsStateWithLifecycle()
     val zones by vm.zones.collectAsStateWithLifecycle()
@@ -46,19 +46,20 @@ private class Ctx(val items: Map<Long, Item>, val zones: Map<Long, Zone>, val fc
     val date = remember { SimpleDateFormat("EEEE, dd/MM", Locale("vi", "VN")).format(Date()).replaceFirstChar { it.uppercase() } }
 
     LazyColumn(
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item { ScreenHeader("Hôm nay", date) }
+        item { OutlinedButton(onCalendar, Modifier.fillMaxWidth()) { Text("📅 Xem lịch tuần / tháng") } }
         if (zones.isNotEmpty()) item { ZoneFilterRow(zones, sel, { zoneFilter = it }) }
         if (tasks.isEmpty()) {
-            item { EmptyState("🌱", "Chưa có lịch nhắc", "Thêm cây hoặc thú cưng ở tab Vườn, lịch sẽ tự được tạo.") }
+            item { EmptyState("🌱", "Chưa có lịch nhắc", "Thêm cây hoặc thú cưng ở Vườn nhà để đặt lịch chăm sóc.") }
         } else {
             item { SummaryCard(late.size + dueToday.size, late.size) }
             section("Quá hạn", late, ctx, vm)
             section("Cần làm hôm nay", dueToday, ctx, vm)
             section("Sắp tới", soon, ctx, vm)
-            if (sorted.isEmpty()) item { EmptyState("🔍", "Khu vực này chưa có việc", "Gán cây vào khu vực ở tab Vườn.") }
+            if (sorted.isEmpty()) item { EmptyState("🔍", "Khu vực này chưa có việc", "Gán cây vào khu vực ở Vườn nhà.") }
         }
     }
 }

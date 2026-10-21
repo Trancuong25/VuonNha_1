@@ -3,7 +3,7 @@ package com.example.vuonnha.data
 // Cơ sở dữ liệu kiến thức chăm sóc. Thêm loài = thêm 1 dòng.
 data class Species(
     val id: String, val name: String, val tip: String,
-    val tasks: List<Pair<String, Int>>, val emoji: String = "🌿"
+    val tasks: List<Pair<String, Int>>, val emoji: String = "🌿", val profileJson: String = ""
 )
 
 val SPECIES = listOf(
@@ -16,7 +16,26 @@ val SPECIES = listOf(
     Species("guppy", "Cá bảy màu", "Thay 20–30% nước mỗi tuần, khử clo.", listOf("Thay nước" to 7, "Vệ sinh lọc" to 21), "🐟"),
     Species("hamster", "Hamster", "Không tắm nước, dùng cát tắm.", listOf("Thay lót chuồng" to 7, "Tắm cát" to 4), "🐹"),
 )
-fun findSpecies(id: String) = SPECIES.firstOrNull { it.id == id }
+enum class SpeciesGroup(val label: String, val emoji: String) {
+    PLANT("Cây cảnh", "🪴"), FISH("Cá cảnh", "🐟"), PET("Thú cưng", "🐾")
+}
+
+// Custom species IDs carry the user-entered label so existing backups retain it too.
+fun customSpecies(name: String, group: SpeciesGroup, tasks: List<Pair<String, Int>> = emptyList()): Species {
+    val label = name.trim()
+    require(label.isNotBlank())
+    require(tasks.all { it.first.isNotBlank() && it.second > 0 })
+    return Species("custom:${group.name}:$label", label,
+        "Loài do bạn nhập. Hãy đặt lịch theo nhu cầu thực tế; ứng dụng chưa có hướng dẫn riêng cho loài này.", tasks, group.emoji)
+}
+
+fun findSpecies(id: String): Species? {
+    SPECIES.firstOrNull { it.id == id }?.let { return it }
+    val parts = id.split(':', limit = 3)
+    if (parts.size != 3 || parts[0] != "custom" || parts[2].isBlank()) return null
+    val group = SpeciesGroup.entries.firstOrNull { it.name == parts[1] } ?: return null
+    return customSpecies(parts[2], group)
+}
 
 // Emoji theo tên việc (dùng khi chưa có đối tượng CareTask, ví dụ lúc chọn loài). Với CareTask dùng t.icon().
 fun taskEmoji(name: String): String = TaskType.infer(name).emoji

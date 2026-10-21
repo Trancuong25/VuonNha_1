@@ -13,3 +13,9 @@
 .externalNativeBuild
 .cxx
 local.properties
+.kotlin/
+.idea/
+node_modules/
+.env
+*.log
+.audit/

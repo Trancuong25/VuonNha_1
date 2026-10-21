@@ -17,11 +17,45 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Brush
+
+/** A distinct wordmark; body text keeps the regular, readable sans-serif face. */
+@Composable fun GardenWordmark() {
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Text("Vườn Nhà", style = MaterialTheme.typography.headlineMedium.copy(
+            fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold,
+            fontSize = 28.sp, lineHeight = 34.sp, letterSpacing = (-0.5).sp),
+            color = MaterialTheme.colorScheme.primary)
+        Box(Modifier.width(44.dp).height(3.dp).clip(CircleShape).background(
+            Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primaryContainer))))
+    }
+}
 
 @Composable fun ScreenHeader(title: String, subtitle: String? = null, modifier: Modifier = Modifier) {
-    Column(modifier.padding(top = 8.dp, bottom = 4.dp)) {
+    Column(modifier.fillMaxWidth().padding(top = 12.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, style = MaterialTheme.typography.headlineMedium)
         if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable fun SectionHeading(number: String, title: String, description: String) {
+    Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.primaryContainer) {
+            Text(number, Modifier.padding(12.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable fun ProfileInfo(label: String, value: String) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
@@ -38,9 +72,10 @@ import androidx.compose.ui.unit.sp
 
 @Composable fun EmptyState(emoji: String, title: String, body: String, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth().padding(vertical = 40.dp, horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(emoji, fontSize = 56.sp)
-        Spacer(Modifier.height(12.dp))
+        EmojiAvatar(emoji, null, 72.dp)
+        Spacer(Modifier.height(20.dp))
         Text(title, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
         Text(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
     }
 }

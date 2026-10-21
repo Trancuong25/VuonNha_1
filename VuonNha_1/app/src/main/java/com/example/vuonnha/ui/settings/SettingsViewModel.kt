@@ -25,6 +25,10 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         reminderMinutes = (reminderMinutes + delta + 1440) % 1440
         Notifications.setMinutes(getApplication(), reminderMinutes)
     }
+    fun setReminder(minutes: Int) {
+        reminderMinutes = minutes.coerceIn(0, 1439)
+        Notifications.setMinutes(getApplication(), reminderMinutes)
+    }
 
     fun backup(uri: Uri) = viewModelScope.launch {
         message = try {

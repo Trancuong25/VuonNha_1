@@ -6,7 +6,8 @@ import androidx.room.*
 @Entity
 data class Item(
     @PrimaryKey(autoGenerate = true) val id: Long = 0, val name: String, val speciesId: String,
-    val zoneId: Long? = null // khu vực (null = chưa phân khu). Không dùng khoá ngoại: xoá khu vực thì repository tự gỡ.
+    val zoneId: Long? = null, // khu vực (null = chưa phân khu)
+    @ColumnInfo(defaultValue = "''") val profileJson: String = ""
 )
 
 // DATABASE v3: khu vực trong nhà. outdoor = ngoài trời (chịu ảnh hưởng thời tiết), covered = có mái che.
