@@ -10,7 +10,7 @@ Cập nhật lần đầu: 21/10/2026 · Antigravity
 | Quy tắc | Chi tiết |
 |---|---|
 | **Không thay đổi kiến trúc** | Giữ nguyên phân lớp: Android Compose / Room / Domain / Node.js backend. Mọi tính năng mới phải đúng lớp. |
-| **Không đổi database schema** | Room hiện ở v4 (`AppDb.kt`). Thêm migration là thay đổi schema — chỉ Codex được phép khi có kế hoạch rõ ràng. |
+| **Không đổi database schema** | Room hiện ở v5 (`data/AppDb.kt`, `MIGRATION_4_5`). Thêm migration là thay đổi schema — chỉ Codex được phép khi có kế hoạch rõ ràng. |
 | **Không đổi API contract** | Endpoint backend (`server.mjs`) và kiểu dữ liệu giữa Android ↔ backend không được đổi unilaterally. |
 | **Không đổi dependencies** | `gradle/libs.versions.toml` và `backend/package.json` chỉ cập nhật khi cần thiết, không nâng version tự ý. |
 | **Không đọc/hiển thị bí mật** | `.env`, API key, token, mật khẩu, session token — không đọc, không log, không commit. |
