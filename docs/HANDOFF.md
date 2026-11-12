@@ -1118,4 +1118,5 @@ Tất cả đang hoạt động và có test; đọc mã để liệt kê đủ,
 - Cây tích hợp giữ nội dung project mới nhất từ thư mục local `VuonNha_1/` và đặt lại ở gốc theo cấu trúc GitHub. Các file chỉ có trên GitHub được giữ; `.gitignore` bao gồm quy tắc project và log ngoài project. Checkout lồng trên đĩa được giữ lại, còn metadata Git lồng và file bị ignore không được đưa vào cây publish.
 - Thay đổi staged: di chuyển các file project sang gốc, cập nhật `.gitignore`, `AGENTS.md`, README và mã/test local; xóa các file IDE local khỏi cây publish.
 - Lệnh đã chạy: `git fetch origin` thành công; kiểm tra status, lịch sử, đường dẫn hai cây; `git diff --cached --check` không báo lỗi. Chưa chạy test/build vì lượt này chỉ xử lý tích hợp Git.
-- Tích hợp đang ở nhánh `codex/integrate-origin-main`; chưa tạo merge commit hoặc push. Bước tiếp theo: hoàn tất kiểm tra cây staged, tạo merge commit và push fast-forward lên `origin/main`.
+- Merge commit `7450105` giữ local `ea4f240` và GitHub `1a6a558` làm hai cha; push fast-forward `1a6a558..7450105` lên `origin/main` thành công ngày 12/11/2026. Cây cuối đặt project tại gốc và không chứa `VuonNha_1/`, `.env`, `local.properties` hoặc `backend/data/`. Không chạy build/test trong lượt đồng bộ Git này. Nhánh dự phòng `backup-before-sync` vẫn giữ nguyên. Bước tiếp theo: tiếp tục phát triển project từ gốc repo.
+
