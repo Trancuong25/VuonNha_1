@@ -24,7 +24,7 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 private val IN = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-private val OUT = SimpleDateFormat("EEE dd/MM", Locale("vi", "VN"))
+private val OUT = SimpleDateFormat("EEE dd/MM", Locale.forLanguageTag("vi-VN"))
 private fun dayLabel(d: String, i: Int) = when (i) {
     0 -> "Hôm nay"; 1 -> "Ngày mai"; else -> runCatching { OUT.format(IN.parse(d)!!) }.getOrDefault(d)
 }

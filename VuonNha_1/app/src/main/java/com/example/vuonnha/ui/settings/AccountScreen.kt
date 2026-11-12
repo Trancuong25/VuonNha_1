@@ -145,6 +145,6 @@ class AccountViewModel(app: Application, repository: AccountRepository) : Androi
             text = { Text(if (operation == "save") "Toàn bộ cây, lịch, lịch sử và ảnh trên máy sẽ thay bản lưu hiện tại của tài khoản này."
                 else "Vườn trên thiết bị sẽ được thay thế bằng bản của tài khoản. App giữ một bản ZIP dự phòng cục bộ trước khi thay; bạn nên xuất ZIP riêng nếu cần giữ vườn hiện tại.") },
             confirmButton = { TextButton({ confirmTransfer = null; if (operation == "save") vm.saveGarden() else vm.restoreGarden() }) { Text("Xác nhận") } },
-            dismissButton = { TextButton({ confirmTransfer = null }) { Text("Hủy") } })
+            dismissButton = { TextButton({ confirmTransfer = null }) { Text("Huỷ") } })
     }
 }

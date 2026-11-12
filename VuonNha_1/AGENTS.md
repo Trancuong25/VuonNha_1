@@ -1,6 +1,6 @@
 # AGENTS.md — Quy tắc chung cho Codex và Antigravity
 
-Tài liệu này áp dụng cho mọi AI agent làm việc trên project VuonNha_1.
+Tài liệu này áp dụng cho mọi AI agent làm việc trên project VuonNha_1. Codex hiện là agent đang thực hiện nhiệm vụ; Antigravity cũng có thể làm việc trong các phân vùng trách nhiệm bên dưới.
 Cập nhật lần đầu: 21/10/2026 · Antigravity
 
 ---
@@ -31,11 +31,17 @@ Commit nhỏ, mục đích rõ:
 - **Không commit:** `.env`, `backend/data/`, `local.properties`, `app/build/`, `*.log`, `.idea/`, `.kotlin/`, `node_modules/`
 - **Phải commit:** Mọi file `.kt`, `.mjs`, `.md`, `build.gradle.kts`, `libs.versions.toml`, `AndroidManifest.xml`, drawables, XML resources
 - Trước mỗi commit: chạy `git diff --stat HEAD` để xem thay đổi thực tế
+- Không push lên GitHub nếu chưa được người dùng đồng ý.
 - Không force-push. Không rebase history đã chia sẻ.
 
 ---
 
 ## 3. Phân vùng trách nhiệm
+
+### Codex — agent hiện đang thực hiện nhiệm vụ
+- Sửa lỗi P0/P1 trong AddSheet và các luồng liên quan khi người dùng yêu cầu; các bản vá M2, M3, B1–B3 cùng phần B3 bổ sung đã được thực hiện theo yêu cầu trực tiếp của người dùng.
+- Thực hiện các sửa lỗi UI/luồng được người dùng giao, kèm JVM test và cập nhật handoff.
+- Phụ trách các thay đổi Room schema/migration khi có kế hoạch được duyệt; backend API/auth, luồng account/backup và dependency chỉ thay đổi khi người dùng yêu cầu rõ.
 
 ### Antigravity làm được độc lập (không cần Codex review)
 - Sửa lỗi P1 trong `PlantsViewModel.kt` (error handling không thay đổi signature)
@@ -45,10 +51,8 @@ Commit nhỏ, mục đích rõ:
 - Tạo/cập nhật `AGENTS.md`
 - Sửa bug UI nhỏ không liên quan đến luồng chính
 
-### Codex phụ trách — Antigravity không tự ý sửa
-- Sửa lỗi P0: logic reset profile/gợi ý khi đổi loài (`PlantsScreen.kt` AddSheet)
-- Sửa lỗi P1: thêm UI tra cứu cho nhánh danh sách (`!custom` branch)
-- Mọi thay đổi Room schema hoặc migration
+### Cần yêu cầu rõ của người dùng trước khi làm
+- Thay đổi Room schema hoặc migration
 - Thay đổi backend API endpoint hoặc authentication logic
 - Thay đổi luồng account/backup
 - Thêm dependency mới

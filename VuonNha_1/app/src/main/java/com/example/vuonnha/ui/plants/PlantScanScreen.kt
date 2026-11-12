@@ -94,10 +94,12 @@ fun PlantScanScreen(onBack: () -> Unit, onOpenExisting: (Long) -> Unit = {},
             else { vm.cancel(); onBack() }
         }
     }
+    var suggestionDiscarded by rememberSaveable(draft, manual) { mutableStateOf(false) }
     if (enteringDetails || manual) {
         AddSheet(zones, { enteringDetails = false; manual = false }, initialCandidate = if (manual) null else draft,
-            saving = state.saving, saveError = state.saveError, fullScreen = true) { name, species, cycles, zone, starts ->
-            vm.savePlant(name, species, cycles, zone, starts, if (manual) null else draft)
+            saving = state.saving, saveError = state.saveError, fullScreen = true,
+            onAiSuggestionDiscarded = { suggestionDiscarded = true }) { name, species, cycles, zone, starts ->
+            vm.savePlant(name, species, cycles, zone, starts, candidateForSave(draft, !manual && !suggestionDiscarded, species.name))
         }
         return
     }
@@ -124,8 +126,7 @@ fun PlantScanScreen(onBack: () -> Unit, onOpenExisting: (Long) -> Unit = {},
             val photo = state.photo
             when {
                 photo != null -> Image(photo.bitmap.asImageBitmap(), "Ảnh cây để nhận diện", Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-                granted && !manual && draft == null -> LivePlantCamera(Modifier.fillMaxSize(), { capture = it }, { cameraError = it }, { stopCamera = it })
-                granted -> Unit
+                granted -> LivePlantCamera(Modifier.fillMaxSize(), { capture = it }, { cameraError = it }, { stopCamera = it })
                 else -> Column(Modifier.align(Alignment.Center).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Icon(Icons.Outlined.CameraAlt, null, Modifier.size(44.dp), tint = white)

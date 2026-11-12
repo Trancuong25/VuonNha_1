@@ -70,11 +70,15 @@ private val DESTS = listOf(
     Dest("settings", "Cài đặt", Icons.Outlined.Settings, Icons.Filled.Settings),
 )
 
+internal fun shouldShowBottomBar(currentRoute: String?, addSheetOpen: Boolean): Boolean =
+    currentRoute != "scan" && currentRoute != "account" && !(currentRoute == "plants" && addSheetOpen)
+
 @Composable fun AppNav() {
     val account by AccountSession.user.collectAsStateWithLifecycle()
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val current = entry?.destination?.route
+    var addSheetOpen by remember { mutableStateOf(false) }
     fun openTab(route: String) {
         if (current == route) return
         nav.navigate(route) {
@@ -91,7 +95,7 @@ private val DESTS = listOf(
     val tasks by rvm.tasks.collectAsStateWithLifecycle()
     val due = tasks.count { it.daysLeft() <= 0 }
 
-    Scaffold(bottomBar = { if (current != "scan" && current != "account") {
+    Scaffold(bottomBar = { if (shouldShowBottomBar(current, addSheetOpen)) {
         Column {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
@@ -125,6 +129,7 @@ private val DESTS = listOf(
         NavHost(nav, startDestination = "plants", modifier = Modifier.padding(pad)) {
             composable("reminders") { RemindersScreen(onCalendar = { openTab("calendar") }) }
             composable("plants") { PlantsScreen(onOpen = { nav.navigate("item/$it") },
+                onAddSheetVisibilityChanged = { addSheetOpen = it },
                 onCalendar = { openTab("calendar") }, onWeather = { nav.navigate("weather") },
                 onReminders = { nav.navigate("reminders") }, onScan = { nav.navigate("scan") }, onAccount = { nav.navigate("account") }) }
             composable("calendar") { CareCalendarScreen({ openTab("plants") }, { nav.navigate("item/$it") }, onJournal = { nav.navigate("journal") }) }

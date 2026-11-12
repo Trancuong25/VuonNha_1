@@ -36,7 +36,7 @@ class GardenFlowAuditTest {
         compose.onNodeWithText("＋ Kiểm tra độ ẩm đất").performScrollTo()
             .performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onNodeWithText("Kiểm tra độ ẩm đất").performScrollTo().assertExists()
-        compose.onNodeWithText("Tra cứu thông tin cây").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Tra cứu thông tin cây").performScrollTo().performClick()
         compose.waitUntil(15000) { compose.onAllNodesWithText("Kim tiền · Zamioculcas zamiifolia").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Kim tiền · Zamioculcas zamiifolia").performScrollTo().performClick()
         compose.onNode(hasText("Thêm vào vườn") and hasClickAction()).performScrollTo().performClick()
@@ -49,7 +49,7 @@ class GardenFlowAuditTest {
         compose.setContent { VuonNhaTheme { AddSheet(emptyList(), {}) { _, s, _, _, _ -> saved = s } } }
         compose.onNodeWithText("Tên loài hoặc mô tả *").performScrollTo().performTextInput("Cây táo")
         androidx.test.espresso.Espresso.closeSoftKeyboard()
-        compose.onNodeWithText("Tra cứu thông tin cây").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Tra cứu thông tin cây").performScrollTo().performClick()
         compose.waitUntil(15000) { compose.onAllNodesWithText("Không kết nối được danh mục cây. Bạn vẫn có thể tự nhập.").fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Thêm vào vườn") and hasClickAction()).performScrollTo().assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals("Cây táo", requireNotNull(saved).name) }

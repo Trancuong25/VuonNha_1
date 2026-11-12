@@ -76,7 +76,7 @@ export async function recognize(imageBase64, { apiKey, model, fetchImpl = provid
   return validateResult(JSON.parse(text));
 }
 
-export function createScanServer({ apiKey, model, token, recognizeImpl = recognize, lookupImpl = lookupOnline, gardenStore, askImpl, accountStore }) {
+export function createScanServer({ apiKey, model, token, recognizeImpl = recognize, lookupImpl = lookupOnline, gardenStore, askImpl, accountStore, logImpl = line => process.stderr.write(`${line}\n`) }) {
   const store = gardenStore || createGardenStore();
   const accounts = accountStore || createAccountStore();
   const accountHandler = createAccountHandler(accounts);
@@ -84,6 +84,13 @@ export function createScanServer({ apiKey, model, token, recognizeImpl = recogni
   let active = false;
   let windowStart = Date.now();
   let count = 0;
+  const logProviderFailure = (route, error, startedAt) => logImpl(JSON.stringify({
+    route,
+    errorName: typeof error?.name === 'string' ? error.name : 'Error',
+    httpStatus: Number.isInteger(error?.httpStatus) ? error.httpStatus : null,
+    elapsedMs: Date.now() - startedAt,
+    model
+  }));
   const server = http.createServer(async (req, res) => {
     const send = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); };
     if (req.method === 'GET' && req.url === '/health') return send(200, { ready: Boolean(apiKey && model && token) });
@@ -111,10 +118,11 @@ export function createScanServer({ apiKey, model, token, recognizeImpl = recogni
       if (Date.now() - windowStart >= 60000) { windowStart = Date.now(); count = 0; }
       if (active || count >= 10) return send(429, { error: 'try-later' });
       active = true; count++;
+      const startedAt = Date.now();
       try {
         const plants = validateProfiles({ plants: await lookupImpl(query, { apiKey, model }) });
         return send(200, { plants, sourceType: 'ai-suggestion' });
-      } catch (error) { return send(providerErrorStatus(error), { error: 'lookup-failed' }); }
+      } catch (error) { logProviderFailure('/plants', error, startedAt); return send(providerErrorStatus(error), { error: 'lookup-failed' }); }
       finally { active = false; }
     }
     if (req.method !== 'POST' || req.url !== '/identify') return send(404, { error: 'not-found' });
@@ -127,6 +135,7 @@ export function createScanServer({ apiKey, model, token, recognizeImpl = recogni
     if (active || count >= 10) return send(429, { error: 'try-later' });
     let size = 0;
     const chunks = [];
+    let identifyStartedAt;
     try {
       for await (const chunk of req) {
         size += chunk.length;
@@ -141,9 +150,11 @@ export function createScanServer({ apiKey, model, token, recognizeImpl = recogni
       if (active) return send(429, { error: 'try-later' });
       active = true;
       count++;
+      identifyStartedAt = Date.now();
       try { send(200, validateResult(await recognizeImpl(image, { apiKey, model }))); }
       finally { active = false; }
     } catch (error) {
+      if (identifyStartedAt !== undefined) logProviderFailure('/identify', error, identifyStartedAt);
       if (!res.writableEnded) send(providerErrorStatus(error), { error: 'scan-failed' });
     }
   });

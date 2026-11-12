@@ -37,7 +37,9 @@ fun ItemDetailScreen(itemId: Long, onBack: () -> Unit, onJournal: () -> Unit, vm
             item { EmptyState("🪴", "Chưa có thông tin", "Dữ liệu đang tải hoặc mục này đã được xoá.") }
         } else {
             val species = findSpecies(member.speciesId)
+            val itemGroup = species?.group ?: SpeciesGroup.PLANT
             val profile = runCatching { org.json.JSONObject(member.profileJson) }.getOrNull()
+                ?: if (itemGroup != SpeciesGroup.PLANT) org.json.JSONObject() else null
             item {
                 EmojiAvatar(species?.emoji ?: "🌿", entries.firstOrNull { it.photoUri.isNotBlank() }?.photoUri, 96.dp)
                 ScreenHeader(member.name, listOfNotNull(species?.name, zones.firstOrNull { it.id == member.zoneId }?.name).joinToString(" · "))
@@ -50,9 +52,12 @@ fun ItemDetailScreen(itemId: Long, onBack: () -> Unit, onJournal: () -> Unit, vm
             if (profile != null) item {
                 OutlinedCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Thông tin cây", style = MaterialTheme.typography.titleMedium)
-                        listOf("scientificName" to "Tên khoa học", "cultivar" to "Giống", "actualHeight" to "Chiều cao hiện tại (cm)",
+                        Text(groupCopy(itemGroup).detailTitle, style = MaterialTheme.typography.titleMedium)
+                        if (itemGroup == SpeciesGroup.PLANT) listOf("scientificName" to "Tên khoa học", "cultivar" to "Giống", "actualHeight" to "Chiều cao hiện tại (cm)",
                             "matureHeight" to "Chiều cao trưởng thành tham khảo", "humidity" to "Độ ẩm không khí", "soil" to "Đất / tưới", "light" to "Ánh sáng tham khảo", "location" to "Vị trí", "actualLight" to "Ánh sáng nơi trồng", "pottingMix" to "Chậu & giá thể", "source" to "Nguồn tham khảo").forEach { (key,label) ->
+                            profile.optString(key).takeIf { it.isNotBlank() }?.let { ProfileInfo(label, it) }
+                        }
+                        else groupFields(itemGroup).map { it.key to it.detailLabel }.forEach { (key,label) ->
                             profile.optString(key).takeIf { it.isNotBlank() }?.let { ProfileInfo(label, it) }
                         }
                     }

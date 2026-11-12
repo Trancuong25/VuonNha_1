@@ -28,9 +28,11 @@ class RecognitionFlowTest {
         compose.onNodeWithText("Kết quả nhận diện").assertExists()
         compose.onNodeWithText("Tiếp theo").performClick()
         compose.onNodeWithText("Kết quả nhận diện").assertDoesNotExist()
-        compose.onNodeWithText("Thông tin bổ sung về cây").performScrollTo().performClick()
+        compose.onNodeWithText("Tiếp tục").performClick()
+        compose.onNodeWithText("Thông tin bổ sung về cây").performScrollTo().assertExists()
         compose.onNodeWithText("Tên khoa học / loài").performScrollTo().assertExists()
-        compose.onNodeWithText("‹ Quay lại kết quả").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Quay lại").performClick()
+        compose.onNodeWithContentDescription("Quay lại").performClick()
         compose.onNodeWithText("Kết quả nhận diện").assertExists()
         compose.runOnIdle { assertFalse(saved) }
     }
@@ -45,7 +47,7 @@ class RecognitionFlowTest {
             }
         } }
         compose.onNodeWithText("Tiếp tục").performClick()
-        compose.onNodeWithText("Tên gọi riêng (không bắt buộc)").performScrollTo().performTextReplacement("Bé Lá")
+        compose.onNodeWithText("Tên riêng (tuỳ chọn)").performScrollTo().performTextReplacement("Bé Lá")
         compose.onNodeWithText("Tiếp tục").performClick()
         compose.onNode(hasText("Thêm vào vườn") and hasClickAction()).performClick()
   compose.onNodeWithText("Xác nhận lưu").performClick()
@@ -63,11 +65,11 @@ class RecognitionFlowTest {
         repeat(4) { index ->
             compose.onNodeWithText("Tên loài hoặc mô tả *").performScrollTo().performClick().performTextReplacement("Cây thử $index")
             androidx.test.espresso.Espresso.closeSoftKeyboard()
-            compose.onNodeWithText("🐟 Cá cảnh").performScrollTo().performClick()
-            compose.onNodeWithText("🪴 Cây cảnh").performScrollTo().performClick()
+            compose.onNodeWithText("Cá").performScrollTo().performClick()
+            compose.onNodeWithText("Cây").performScrollTo().performClick()
         }
         compose.onNodeWithText("Tiếp tục").performClick()
-        compose.onNodeWithText("Tên gọi riêng (không bắt buộc)").performScrollTo().performClick().performTextReplacement("Chậu bàn học")
+        compose.onNodeWithText("Tên riêng (tuỳ chọn)").performScrollTo().performClick().performTextReplacement("Chậu bàn học")
         androidx.test.espresso.Espresso.closeSoftKeyboard()
         compose.onNodeWithText("Tiếp tục").performClick()
         compose.onNode(hasText("Thêm vào vườn") and hasClickAction()).assertIsEnabled()

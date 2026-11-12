@@ -22,6 +22,29 @@ test('provider outage and timeout remain distinct without exposing provider deta
  }
 });
 
+test('plant lookup logs safe provider diagnostics and preserves provider status codes', async t => {
+  const logs = [];
+  const url = await running(t, {
+    apiKey: 'test-only', model: 'test-model', token: 'test-token',
+    lookupImpl: async () => { const error = new Error('private question or provider detail'); error.name = 'TimeoutError'; throw error; },
+    logImpl: line => logs.push(JSON.parse(line))
+  });
+  const response = await fetch(`${url}/plants?q=C%C3%A2y%20t%C3%A1o`, { headers: { authorization: 'Bearer test-token' } });
+  assert.equal(response.status, 504);
+  assert.deepEqual(logs, [{ route: '/plants', errorName: 'TimeoutError', httpStatus: null, elapsedMs: logs[0].elapsedMs, model: 'test-model' }]);
+  assert.equal(Number.isInteger(logs[0].elapsedMs), true);
+  assert.equal(JSON.stringify(logs).includes('private'), false);
+  for (const status of [429, 503]) {
+    const providerUrl = await running(t, {
+      apiKey: 'test-only', model: 'test-model', token: 'test-token',
+      lookupImpl: async () => { const error = new Error('provider error'); error.httpStatus = status; throw error; },
+      logImpl: () => {}
+    });
+    const providerResponse = await fetch(`${providerUrl}/plants?q=C%C3%A2y%20t%C3%A1o`, { headers: { authorization: 'Bearer test-token' } });
+    assert.equal(providerResponse.status, status);
+  }
+});
+
 test('authenticated scan returns validated candidates', async t => {
   let called = 0;
   const url = await running(t, { apiKey: 'test-only', model: 'test-model', token: 'test-token', recognizeImpl: async image => {

@@ -19,3 +19,6 @@ node_modules/
 .env
 *.log
 .audit/
+
+anr-*.txt
+docs/build-log*.txt

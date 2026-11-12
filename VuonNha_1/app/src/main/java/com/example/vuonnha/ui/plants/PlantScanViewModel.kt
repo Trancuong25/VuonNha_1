@@ -73,8 +73,7 @@ class PlantScanViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val care = CareRepository.get(getApplication())
                 if (photo != null) {
-                    val note = candidate?.let { "Gợi ý nhận diện: ${it.name} (${it.scientificName}). ${it.careTips}" }
-                        ?: "Ảnh đầu tiên khi thêm vào vườn."
+                    val note = recognitionDiaryNote(candidate)
                     care.addScannedItem(name, species, cycles, zone, starts, photo.bitmap, note)
                 } else care.addItem(name, species, cycles, zone, starts)
                 _state.value = _state.value.copy(saving = false, saved = true)

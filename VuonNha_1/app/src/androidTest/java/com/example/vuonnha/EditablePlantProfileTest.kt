@@ -27,7 +27,7 @@ class EditablePlantProfileTest {
   compose.onNodeWithText("Chỉnh lại").performClick()
   compose.runOnIdle { assertNull(saved) }
   compose.onNode(hasText("Thêm vào vườn") and hasClickAction()).performClick()
-  compose.onNode(isToggleable()).performScrollTo().performClick()
+  compose.onNodeWithContentDescription("Lưu thông tin bổ sung về cây").performScrollTo().performClick()
   compose.onNodeWithText("Xác nhận lưu").performClick()
   compose.runOnIdle { val json=JSONObject(requireNotNull(saved).profileJson);assertFalse(json.has("light"));assertFalse(json.has("scientificName"));assertEquals("Ban công",json.getString("location")) }
  }
@@ -38,16 +38,16 @@ class EditablePlantProfileTest {
   compose.onNodeWithText("Tên loài hoặc mô tả *").performTextReplacement("Trầu bà")
   androidx.test.espresso.Espresso.closeSoftKeyboard()
   compose.onNodeWithText("Tiếp tục").performClick()
-  compose.onNodeWithText("Cây sẽ ở góc nào?").assertExists()
+  compose.onNodeWithText("Cây sẽ ở đâu?").assertExists()
  }
  @Test fun deletingSuggestionAndChangingFocusNeverRestoresIt() {
   var saved: Species? = null
   val candidate=PlantCandidate("Kim tiền","Zamioculcas zamiifolia","medium",emptyList(),"Tham khảo",emptyList(),mapOf("light" to "Ánh sáng gián tiếp", "soil" to "Thoát nước"))
   compose.setContent { VuonNhaTheme { AddSheet(emptyList(),{},candidate,fullScreen=true){_,species,_,_,_->saved=species} } }
-  compose.onNodeWithText("Thông tin bổ sung về cây").performScrollTo().performClick()
-  compose.onNodeWithText("Ánh sáng").performScrollTo().performTextReplacement("")
   compose.onNodeWithText("Tiếp tục").performClick()
-  compose.onNodeWithText("Tên gọi riêng (không bắt buộc)").performScrollTo().performTextReplacement("Bé Lá")
+  compose.onNodeWithText("Thông tin bổ sung về cây").performScrollTo().assertExists()
+  compose.onNodeWithText("Ánh sáng").performScrollTo().performTextReplacement("")
+  compose.onNodeWithText("Tên riêng (tuỳ chọn)").performScrollTo().performTextReplacement("Bé Lá")
   compose.onNodeWithText("Vị trí đặt cây").performScrollTo().performTextReplacement("Cửa sổ hướng đông")
   androidx.test.espresso.Espresso.closeSoftKeyboard()
   compose.onNodeWithText("Tiếp tục").performClick()
@@ -66,14 +66,14 @@ class EditablePlantProfileTest {
   var savedName="";var saved:Species?=null;var savedCycles:List<Int> = emptyList()
   val candidate=PlantCandidate("Kim tiền","Zamioculcas zamiifolia","medium",emptyList(),"Tham khảo",listOf("Kiểm tra đất" to 5),mapOf("light" to "Gián tiếp"))
   restoration.setContent { VuonNhaTheme { AddSheet(emptyList(),{},candidate,fullScreen=true){name,species,cycles,_,_->savedName=name;saved=species;savedCycles=cycles} } }
-  compose.onNodeWithText("Thông tin bổ sung về cây").performScrollTo().performClick()
-  compose.onNodeWithText("Ánh sáng").performScrollTo().performTextReplacement("")
   compose.onNodeWithText("Tiếp tục").performClick()
-  compose.onNodeWithText("Tên gọi riêng (không bắt buộc)").performScrollTo().performTextReplacement("Bé Lá")
+  compose.onNodeWithText("Thông tin bổ sung về cây").performScrollTo().assertExists()
+  compose.onNodeWithText("Ánh sáng").performScrollTo().performTextReplacement("")
+  compose.onNodeWithText("Tên riêng (tuỳ chọn)").performScrollTo().performTextReplacement("Bé Lá")
   compose.onNodeWithText("Vị trí đặt cây").performScrollTo().performTextReplacement("Cửa sổ")
   androidx.test.espresso.Espresso.closeSoftKeyboard()
   restoration.emulateSavedInstanceStateRestore()
-  compose.onNodeWithText("Cây sẽ ở góc nào?").assertExists()
+  compose.onNodeWithText("Cây sẽ ở đâu?").assertExists()
   compose.onNodeWithText("Tiếp tục").performClick()
   compose.onNode(hasText("Thêm vào vườn") and hasClickAction()).performClick()
   compose.onNodeWithText("Xác nhận lưu").performClick()

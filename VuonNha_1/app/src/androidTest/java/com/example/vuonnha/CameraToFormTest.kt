@@ -12,7 +12,8 @@ class CameraToFormTest {
 
     @Test fun liveCameraToManualFormAndKeyboardRemainsResponsive() {
         com.example.vuonnha.data.ScanSettings.hide(compose.activity, false)
-        compose.onNodeWithContentDescription("Quét cây bằng máy ảnh").performClick()
+        compose.onNodeWithContentDescription("Tiện ích").performClick()
+        compose.onNodeWithText("Quét cây", substring = false).performClick()
         compose.onNodeWithText("Tự nhập tên cây").assertExists()
         // Give the real camera time to open before leaving it.
         android.os.SystemClock.sleep(3000)
@@ -25,18 +26,18 @@ class CameraToFormTest {
             compose.onNodeWithText("Tên loài hoặc mô tả *").performScrollTo().performClick().performTextReplacement("Cây $index")
             androidx.test.espresso.Espresso.closeSoftKeyboard()
             compose.onNodeWithText("Tiếp tục").performClick()
-            compose.onNodeWithText("Tên gọi riêng (không bắt buộc)").performScrollTo().performClick().performTextClearance()
+            compose.onNodeWithText("Tên riêng (tuỳ chọn)").performScrollTo().performClick().performTextClearance()
             shellOutput("input text Chau$index")
             compose.onNodeWithText("Chau$index").assertExists()
             androidx.test.espresso.Espresso.closeSoftKeyboard()
-            compose.onNodeWithText("Quay lại",substring=false).performClick()
+            compose.onNodeWithContentDescription("Quay lại").performClick()
         }
         compose.onNodeWithText("Tiếp tục").performClick()
         compose.onNodeWithText("Tiếp tục").performClick()
         compose.onNode(hasText("Thêm vào vườn") and hasClickAction()).assertIsEnabled()
-        compose.onNodeWithText("Quay lại",substring=false).performClick()
-        compose.onNodeWithText("Quay lại",substring=false).performClick()
-        compose.onNodeWithText("‹ Quay lại máy ảnh").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Quay lại").performClick()
+        compose.onNodeWithContentDescription("Quay lại").performClick()
+        compose.onNodeWithContentDescription("Quay lại").performClick()
         compose.onNodeWithText("Quét cây").assertExists()
     }
 

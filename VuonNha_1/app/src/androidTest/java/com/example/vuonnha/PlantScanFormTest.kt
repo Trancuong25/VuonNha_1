@@ -32,13 +32,15 @@ class PlantScanFormTest {
         compose.setContent { VuonNhaTheme { AddSheet(emptyList(), {}, candidate, fullScreen = true) { _, _, _, _, _ -> } } }
         compose.onNodeWithText("Tiếp tục").performClick()
         compose.onNodeWithText("Tiếp tục").performClick()
-        compose.onNodeWithText("＋ Thêm việc chăm sóc").performScrollTo()
+        compose.onNodeWithText("＋ Thêm việc khác").performScrollTo()
             .performSemanticsAction(SemanticsActions.OnClick) { it() }
-        compose.onNodeWithText("Nhập tên việc hoặc bấm thùng rác để bỏ lịch này.").assertExists()
+        compose.onNodeWithText("Việc tự đặt…").performClick()
+        compose.onNodeWithText("Thêm việc").performClick()
+        compose.onNodeWithText("Có việc chăm sóc chưa có tên. Điền tên việc hoặc bỏ việc đó để lưu.").assertExists()
         compose.onNode(hasText("Thêm vào vườn") and hasClickAction()).performClick()
         compose.onNodeWithText("Xem lại trước khi lưu").assertDoesNotExist()
-        compose.onNodeWithContentDescription("Bỏ việc").performScrollTo()
-            .performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("(Chưa đặt tên)").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Bỏ việc").performClick()
         compose.onNode(hasText("Thêm vào vườn") and hasClickAction()).assertIsEnabled()
     }
 
@@ -48,7 +50,7 @@ class PlantScanFormTest {
         androidx.test.espresso.Espresso.closeSoftKeyboard()
         compose.onNodeWithText("Tên cây dài quá, bạn rút gọn còn tối đa 120 ký tự nhé.").assertExists()
         compose.onNodeWithText("Tiếp tục").performClick()
-        compose.onNodeWithText("Bạn đang trồng cây gì?").assertExists()
+        compose.onNodeWithText("Bạn thêm gì vào vườn?").assertExists()
         compose.onNodeWithText("Tên loài hoặc mô tả *").performScrollTo().performTextReplacement("Kim tiền")
         androidx.test.espresso.Espresso.closeSoftKeyboard()
         compose.onNodeWithText("Tiếp tục").assertIsEnabled().performClick()

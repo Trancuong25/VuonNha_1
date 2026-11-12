@@ -50,13 +50,19 @@ class PlantsViewModel(app: Application) : AndroidViewModel(app) {
             finally { adding = false }
         }
     }
-    fun editItem(i: Item, name: String, zoneId: Long?, speciesId: String = i.speciesId, profileJson: String = i.profileJson) = viewModelScope.launch { repo.editItem(i, name, zoneId, speciesId, profileJson) }
-    fun removeItem(id: Long) = viewModelScope.launch { repo.removeItem(id) }
-    fun updateCycle(t: CareTask, days: Int) = viewModelScope.launch { repo.updateCycle(t, days) }
-    fun addTask(itemId: Long, name: String, days: Int, type: TaskType) = viewModelScope.launch { repo.addTask(itemId, name, days, type) }
-    fun removeTask(t: CareTask) = viewModelScope.launch { repo.removeTask(t) }
-    fun done(t: CareTask) = viewModelScope.launch { repo.done(t) }
-    fun snooze(t: CareTask) = viewModelScope.launch { repo.snooze(t) }
-    fun addZone(name: String, outdoor: Boolean, covered: Boolean, emoji: String) = viewModelScope.launch { repo.addZone(name, outdoor, covered, emoji) }
-    fun removeZone(id: Long) = viewModelScope.launch { repo.removeZone(id) }
+    var operationError by mutableStateOf<String?>(null)
+        private set
+    fun clearOperationError() { operationError = null }
+    private fun guarded(message: String, block: suspend () -> Unit) = viewModelScope.launch {
+        guardedOperation(message, block) { operationError = it }
+    }
+    fun editItem(i: Item, name: String, zoneId: Long?, speciesId: String = i.speciesId, profileJson: String = i.profileJson) = guarded("Chưa sửa được thông tin. Hãy thử lại.") { repo.editItem(i, name, zoneId, speciesId, profileJson) }
+    fun removeItem(id: Long) = guarded("Chưa xóa được. Hãy thử lại.") { repo.removeItem(id) }
+    fun updateCycle(t: CareTask, days: Int) = guarded("Chưa đổi được chu kỳ. Hãy thử lại.") { repo.updateCycle(t, days) }
+    fun addTask(itemId: Long, name: String, days: Int, type: TaskType) = guarded("Chưa thêm được việc. Hãy thử lại.") { repo.addTask(itemId, name, days, type) }
+    fun removeTask(t: CareTask) = guarded("Chưa xóa được việc. Hãy thử lại.") { repo.removeTask(t) }
+    fun done(t: CareTask) = guarded("Chưa ghi nhận được việc đã làm. Hãy thử lại.") { repo.done(t) }
+    fun snooze(t: CareTask) = guarded("Chưa hoãn được việc. Hãy thử lại.") { repo.snooze(t) }
+    fun addZone(name: String, outdoor: Boolean, covered: Boolean, emoji: String) = guarded("Chưa thêm được khu vực. Hãy thử lại.") { repo.addZone(name, outdoor, covered, emoji) }
+    fun removeZone(id: Long) = guarded("Chưa xóa được khu vực. Hãy thử lại.") { repo.removeZone(id) }
 }

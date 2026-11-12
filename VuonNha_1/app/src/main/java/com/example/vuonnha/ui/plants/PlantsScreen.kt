@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Delete
@@ -35,7 +36,10 @@ import androidx.compose.runtime.saveable.mapSaver
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -53,7 +57,8 @@ import java.time.format.DateTimeFormatter
 import com.example.vuonnha.ui.common.*
 
 @Composable fun PlantsScreen(vm: PlantsViewModel = viewModel(), onOpen: (Long) -> Unit = {},
-    onCalendar: () -> Unit = {}, onWeather: () -> Unit = {}, onReminders: () -> Unit = {}, onScan: () -> Unit = {}, onAccount: () -> Unit = {}) {
+    onCalendar: () -> Unit = {}, onWeather: () -> Unit = {}, onReminders: () -> Unit = {}, onScan: () -> Unit = {}, onAccount: () -> Unit = {},
+    onAddSheetVisibilityChanged: (Boolean) -> Unit = {}) {
     val account by AccountSession.user.collectAsStateWithLifecycle()
     val scanHidden by ScanSettings.hiddenState.collectAsStateWithLifecycle()
     val list by vm.items.collectAsStateWithLifecycle()
@@ -61,8 +66,17 @@ import com.example.vuonnha.ui.common.*
     val diary by vm.diary.collectAsStateWithLifecycle()
     val zones by vm.zones.collectAsStateWithLifecycle()
     val logs by vm.logs.collectAsStateWithLifecycle()
+    val operationSnackbar = remember { SnackbarHostState() }
+    LaunchedEffect(vm.operationError) {
+        vm.operationError?.let {
+            operationSnackbar.showSnackbar(it)
+            vm.clearOperationError()
+        }
+    }
     var query by remember { mutableStateOf("") }
     var adding by rememberSaveable { mutableStateOf(false) }
+    SideEffect { onAddSheetVisibilityChanged(adding) }
+    DisposableEffect(Unit) { onDispose { onAddSheetVisibilityChanged(false) } }
     var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
     val editing = list.firstOrNull { it.id == editingId }
     var deleting by remember { mutableStateOf<Item?>(null) }
@@ -197,6 +211,7 @@ import com.example.vuonnha.ui.common.*
                 GardenChecklist(task, itemById[task.itemId]?.name.orEmpty(), { onOpen(task.itemId) }, { vm.done(task) }, { vm.snooze(task) })
             }
         }
+        SnackbarHost(operationSnackbar, Modifier.align(Alignment.BottomCenter))
     }
 
     editing?.let { EditSheet(it, byItem[it.id] ?: emptyList(), zones, vm) { editingId = null } }
@@ -268,7 +283,7 @@ import com.example.vuonnha.ui.common.*
     }
 }
 
-private data class NewCare(val name: String, val days: Int, val date: LocalDate = LocalDate.now())
+private typealias NewCare = CarePlanOption
 private val CarePlansSaver = listSaver<List<NewCare>, Any>(
     save = { plans -> plans.flatMap { listOf(it.name, it.days, it.date.toEpochDay()) } },
     restore = { values -> values.chunked(3).map { NewCare(it[0] as String, it[1] as Int, LocalDate.ofEpochDay(it[2] as Long)) } }
@@ -280,7 +295,7 @@ private val SpeciesSaver = Saver<Species, String>(save = { it.id }, restore = { 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable fun AddSheet(zones: List<Zone>, onDismiss: () -> Unit, initialCandidate: PlantCandidate? = null,
     saving: Boolean = false, saveError: String? = null, scanHeader: (@Composable () -> Unit)? = null,
-    fullScreen: Boolean = false, backLabel: String? = null,
+    fullScreen: Boolean = false, backLabel: String? = null, onAiSuggestionDiscarded: () -> Unit = {},
     onSave: (String, Species, List<Int>, Long?, List<Long>) -> Unit) {
     var sp by rememberSaveable(stateSaver = SpeciesSaver) { mutableStateOf(SPECIES.first()) }
     var custom by rememberSaveable { mutableStateOf(true) }
@@ -288,66 +303,232 @@ private val SpeciesSaver = Saver<Species, String>(save = { it.id }, restore = { 
     var usingAi by rememberSaveable { mutableStateOf(initialCandidate != null) }
     var group by rememberSaveable { mutableStateOf(SpeciesGroup.PLANT) }
     var name by rememberSaveable { mutableStateOf(initialCandidate?.name.orEmpty()) }
+    var nameAutofilled by rememberSaveable { mutableStateOf(initialCandidate?.name.orEmpty().trim()) }
     var zoneId by rememberSaveable { mutableStateOf<Long?>(null) }
     val scope = rememberCoroutineScope()
     var lookupJob by remember { mutableStateOf<Job?>(null) }
-    var looking by remember { mutableStateOf(false) }
-    var lookupError by remember { mutableStateOf<String?>(null) }
-    var matches by remember { mutableStateOf<List<PlantProfile>>(emptyList()) }
+    var lookupState by remember { mutableStateOf(LookupRequestState<PlantProfile>()) }
+    val looking = lookupState.looking
+    val lookupError = lookupState.error
+    val matches = lookupState.matches
+    fun cancelActiveLookup(clearError: Boolean = false) {
+        lookupJob?.cancel()
+        lookupJob = null
+        val cancelled = cancelLookup(lookupState)
+        lookupState = cancelled.copy(matches = emptyList(), error = if (clearError) null else cancelled.error)
+    }
+    fun updateNameForSpecies(newSpeciesName: String) {
+        val updated = updateAutofilledPlantName(name, nameAutofilled, newSpeciesName)
+        name = updated.name
+        nameAutofilled = updated.autofilledName
+    }
     var profile by rememberSaveable(stateSaver = ProfileSaver) { mutableStateOf<Map<String,String>>(initialCandidate?.let {
         it.profile + mapOf("scientificName" to it.scientificName, "source" to "Gợi ý từ nhận diện AI · kiểm tra trước khi lưu")
     } ?: emptyMap()) }
     var detailsExpanded by rememberSaveable { mutableStateOf(initialCandidate != null) }
     var editedFields by rememberSaveable(stateSaver = EditedFieldsSaver) { mutableStateOf<Set<String>>(emptySet()) }
+    var derivedFor by rememberSaveable { mutableStateOf(initialCandidate?.name.orEmpty()) }
     // Keep manual and suggested schedules separately, so typing a species name never resets care dates.
-    var manualPlans by rememberSaveable(stateSaver = CarePlansSaver) { mutableStateOf<List<NewCare>>(initialCandidate?.tasks?.map { NewCare(it.first, it.second) } ?: emptyList()) }
+    val initialAiPlans = remember(initialCandidate) { initialCandidate?.tasks?.map { NewCare(it.first, it.second) } ?: emptyList() }
+    var manualPlans by rememberSaveable(stateSaver = CarePlansSaver) { mutableStateOf<List<NewCare>>(initialAiPlans) }
+    var manualPlansSourceSpecies by rememberSaveable { mutableStateOf(initialCandidate?.name.orEmpty().takeIf { initialAiPlans.isNotEmpty() }.orEmpty()) }
+    var manualPlansEdited by rememberSaveable { mutableStateOf(false) }
     var suggestedPlans by rememberSaveable(sp.id, stateSaver = CarePlansSaver) { mutableStateOf(sp.tasks.map { NewCare(it.first, it.second) }) }
+    var manualDisabledPlans by rememberSaveable(stateSaver = CarePlansSaver) { mutableStateOf<List<NewCare>>(emptyList()) }
+    var suggestedDisabledPlans by rememberSaveable(sp.id, stateSaver = CarePlansSaver) { mutableStateOf<List<NewCare>>(emptyList()) }
     var firstReminder by rememberSaveable { mutableStateOf(false) }
     var pickingDate by remember { mutableStateOf<Int?>(null) }
+    var editingPlanName by remember { mutableStateOf<String?>(null) }
+    var creatingPlan by remember { mutableStateOf(false) }
+    var draftPlanName by remember { mutableStateOf("") }
+    var draftPlanDays by remember { mutableIntStateOf(7) }
+    var addCareMenu by remember { mutableStateOf(false) }
     var step by rememberSaveable { mutableIntStateOf(0) }
     var conditionsExpanded by rememberSaveable { mutableStateOf(false) }
     var attempted by rememberSaveable { mutableStateOf(false) }
     var reviewing by rememberSaveable { mutableStateOf(false) }
+    var confirmDiscard by rememberSaveable { mutableStateOf(false) }
     var keepExtra by rememberSaveable { mutableStateOf(true) }
-    val referenceKeys = setOf("scientificName", "cultivar", "actualHeight", "matureHeight", "humidity", "soil", "light", "source")
+    val speciesDerivedKeys = REFERENCE_KEYS - "actualHeight"
+    fun clearStaleSpeciesData(newName: String): SpeciesChangeResult =
+        if (derivedFor.isBlank()) SpeciesChangeResult(profile, editedFields)
+        else clearSpeciesDerivedData(profile, editedFields, speciesDerivedKeys, derivedFor, newName)
     val formScroll = rememberScrollState()
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
     fun goToStep(value: Int) { focus.clearFocus(); step = value.coerceIn(0, 2) }
     LaunchedEffect(step) { formScroll.scrollTo(0) }
-    androidx.activity.compose.BackHandler(enabled = fullScreen && !saving) {
-        if (step > 0) goToStep(step - 1) else onDismiss()
-    }
     val plans = if (custom) manualPlans else suggestedPlans
-    fun updatePlans(value: List<NewCare>) { if (custom) manualPlans = value else suggestedPlans = value }
+    val disabledPlans = if (custom) manualDisabledPlans else suggestedDisabledPlans
+    val currentSpeciesName = if (custom) speciesName.trim() else sp.name
+    val finalPlantName = effectivePlantName(name.trim(), nameAutofilled, currentSpeciesName)
+    val copy = groupCopy(group)
+    fun snapshotPlans(values: List<NewCare>) = values.map { DraftCarePlan(it.name, it.days, it.date) }
+    val initialDraft = remember(initialCandidate) {
+        val initialManualPlans = initialCandidate?.tasks?.map { NewCare(it.first, it.second) } ?: emptyList()
+        val initialSuggestedPlans = SPECIES.first().tasks.map { NewCare(it.first, it.second) }
+        AddSheetDraftState(
+            name = initialCandidate?.name.orEmpty(),
+            speciesName = initialCandidate?.name.orEmpty(),
+            group = SpeciesGroup.PLANT,
+            profile = initialCandidate?.let {
+                it.profile + mapOf("scientificName" to it.scientificName, "source" to "Gợi ý từ nhận diện AI · kiểm tra trước khi lưu")
+            } ?: emptyMap(),
+            editedFields = emptySet(),
+            derivedFor = initialCandidate?.name.orEmpty(),
+            manualPlans = snapshotPlans(initialManualPlans),
+            suggestedPlans = snapshotPlans(initialSuggestedPlans),
+            plans = snapshotPlans(initialManualPlans),
+            zoneId = null,
+            firstReminder = false,
+            usingAi = initialCandidate != null,
+            custom = true,
+            speciesId = SPECIES.first().id,
+            keepExtra = true
+        )
+    }
+    val currentDraft = AddSheetDraftState(
+        name = name,
+        speciesName = speciesName,
+        group = group,
+        profile = profile,
+        editedFields = editedFields,
+        derivedFor = derivedFor,
+        manualPlans = snapshotPlans(manualPlans),
+        suggestedPlans = snapshotPlans(suggestedPlans),
+        plans = snapshotPlans(plans),
+        zoneId = zoneId,
+        firstReminder = firstReminder,
+        usingAi = usingAi,
+        custom = custom,
+        speciesId = sp.id,
+        keepExtra = keepExtra
+    )
+    fun requestDismiss() {
+        if (saving) return
+        if (hasUnsavedDraft(currentDraft, initialDraft)) confirmDiscard = true else onDismiss()
+    }
+    androidx.activity.compose.BackHandler(enabled = fullScreen) {
+        if (!saving) {
+            if (step > 0) goToStep(step - 1) else requestDismiss()
+        }
+    }
+    fun updatePlans(value: List<NewCare>) {
+        if (custom) { manualPlans = value; manualPlansEdited = true }
+        else suggestedPlans = value
+    }
+    fun updateManualPlansFromLookup(species: String, tasks: List<Pair<String, Int>>) {
+        val result = updateLookupPlans(manualPlans, manualPlansSourceSpecies, manualPlansEdited, species,
+            tasks.map { NewCare(it.first, it.second) })
+        manualPlans = result.plans
+        manualPlansSourceSpecies = result.sourceSpecies
+        manualPlansEdited = result.userEdited
+    }
     fun updatePlan(index: Int, value: NewCare) { updatePlans(plans.toMutableList().also { it[index] = value }) }
+    fun updateDisabledPlans(value: List<NewCare>) {
+        if (custom) manualDisabledPlans = value else suggestedDisabledPlans = value
+    }
+    fun togglePlan(plan: NewCare, enabled: Boolean) {
+        val result = toggleCarePlan(plans, disabledPlans, plan, enabled)
+        updatePlans(result.active)
+        updateDisabledPlans(result.inactive)
+    }
     val invalidDates = !firstReminder && plans.any { it.date > LocalDate.now() }
-    val valid = (!custom || speciesName.trim().length in 1..120) && name.trim().length <= 120 && plans.size <= 30 && profile.values.all { it.length <= 1000 } && plans.all { it.name.trim().length in 1..120 && it.days in 1..365 } && !invalidDates && !looking
-    val canContinue = if (step == 0) (!custom || speciesName.trim().length in 1..120) && profile.values.all { it.length <= 1000 } && !looking
-        else name.trim().length <= 120 && profile.values.all { it.length <= 1000 }
+    val profileGroup = if (custom) group else sp.group
+    val review = preparePlantReview(PlantDraft(profile, editedFields, derivedFor), if (custom) speciesName else sp.name, keepExtra, profileGroup)
+    val savedProfile = review.profile
+    val profileValid = !hasOversizedProfileValue(savedProfile)
+    val nameSaveHint = plantNameSaveHint(name, nameAutofilled, currentSpeciesName)
+    val valid = (!custom || speciesName.trim().length in 1..120) && name.trim().length <= 120 && plans.size <= 30 && profileValid && plans.all { it.name.trim().length in 1..120 && it.days in 1..365 } && !invalidDates && !looking
+    val canContinue = if (step == 0) (!custom || speciesName.trim().length in 1..120) && profileValid && !looking
+        else name.trim().length <= 120 && profileValid
     fun submit() {
-        val savedProfile = if (keepExtra) profile else profile.filterKeys { it !in referenceKeys }
         val chosen = if (custom) customSpecies(speciesName, group, plans.map { it.name.trim() to it.days }).copy(
-            profileJson = if (group == SpeciesGroup.PLANT && savedProfile.isNotEmpty()) JSONObject(savedProfile).toString() else "")
-        else sp.copy(profileJson = if (savedProfile.isNotEmpty()) JSONObject(savedProfile).toString() else "")
-        onSave(name.trim().ifEmpty { chosen.name }, chosen, plans.map { it.days }, zoneId,
+            profileJson = if (savedProfile.isNotEmpty()) JSONObject(savedProfile).toString() else "")
+        else speciesWithReviewedTasks(sp, plans.map { it.name.trim() to it.days }).copy(profileJson = if (savedProfile.isNotEmpty()) JSONObject(savedProfile).toString() else "")
+        onSave(finalPlantName, chosen, plans.map { it.days }, zoneId,
             plans.map { scheduleStart(it.date, it.days, firstReminder) })
     }
     fun requestLookup(fillSingleResult: Boolean = false) {
-        lookupError = null; matches = emptyList(); looking = true
+        lookupJob?.cancel()
+        lookupJob = null
+        lookupState = beginLookup(lookupState)
+        val requestToken = lookupState.token
         lookupJob = scope.launch {
             try {
                 val results = PlantLookupRepository().search(speciesName)
-                if (results.isEmpty()) lookupError = "Chưa tìm được thông tin. Bạn vẫn có thể tự điền hoặc để trống."
-                else if (fillSingleResult && results.size == 1) {
-                    val match = results.first()
-                    speciesName = match.name
-                    profile = profile + match.fields.filter { (key, _) -> key !in editedFields }
-                    if (manualPlans.isEmpty()) manualPlans = match.tasks.map { NewCare(it.first, it.second) }
-                } else matches = results
+                if (requestToken == lookupState.token) {
+                    if (results.isEmpty()) {
+                        lookupState = finishLookup(lookupState, requestToken,
+                            error = "Chưa tìm được thông tin. Bạn vẫn có thể tự điền hoặc để trống.")
+                    } else if (fillSingleResult && results.size == 1) {
+                        val match = results.first()
+                        val speciesCleaned = clearStaleSpeciesData(match.name)
+                        speciesName = match.name
+                        updateNameForSpecies(match.name)
+                        profile = mergeLookupProfile(speciesCleaned.profile, speciesCleaned.editedFields, match.fields)
+                        editedFields = speciesCleaned.editedFields
+                        derivedFor = match.name
+                        updateManualPlansFromLookup(match.name, match.tasks)
+                        lookupState = finishLookup(lookupState, requestToken, matches = emptyList())
+                    } else {
+                        lookupState = finishLookup(lookupState, requestToken, matches = results)
+                    }
+                }
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { lookupError = e.message ?: "Chưa tra cứu được. Bạn có thể điền sau." }
-            finally { looking = false }
+            catch (e: Exception) {
+                if (requestToken == lookupState.token) {
+                    lookupState = finishLookup(lookupState, requestToken,
+                        error = e.message ?: "Chưa tra cứu được. Bạn có thể điền sau.")
+                }
+            } finally {
+                lookupState = finishLookup(lookupState, requestToken)
+            }
         }
+    }
+    if (creatingPlan) AlertDialog(onDismissRequest = { creatingPlan = false },
+        title = { Text("Việc tự đặt") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(draftPlanName, { draftPlanName = it }, label = { Text("Tên việc *") }, singleLine = true)
+            CycleStepper("Lặp lại mỗi", draftPlanDays) { draftPlanDays = it }
+        } },
+        confirmButton = { TextButton({
+            updatePlans(plans + NewCare(draftPlanName, draftPlanDays))
+            creatingPlan = false
+        }, enabled = plans.size < 30) { Text("Thêm việc") } },
+        dismissButton = { TextButton({ creatingPlan = false }) { Text("Hủy") } })
+    editingPlanName?.let { planName ->
+        val activeIndex = plans.indexOfFirst { it.name == planName }
+        val inactiveIndex = disabledPlans.indexOfFirst { it.name == planName }
+        val plan = plans.getOrNull(activeIndex) ?: disabledPlans.getOrNull(inactiveIndex)
+        if (plan != null) AlertDialog(onDismissRequest = { editingPlanName = null },
+            title = { Text("Chỉnh việc chăm sóc") },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (custom) OutlinedTextField(plan.name, { value ->
+                    if (activeIndex >= 0) updatePlan(activeIndex, plan.copy(name = value))
+                    else updateDisabledPlans(disabledPlans.toMutableList().also { it[inactiveIndex] = plan.copy(name = value) })
+                    editingPlanName = value
+                }, label = { Text("Tên việc *") }, singleLine = true)
+                CycleStepper("Lặp lại mỗi", plan.days) { days ->
+                    if (activeIndex >= 0) updatePlan(activeIndex, plan.copy(days = days))
+                    else updateDisabledPlans(disabledPlans.toMutableList().also { it[inactiveIndex] = plan.copy(days = days) })
+                }
+                if (activeIndex >= 0) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(!firstReminder, { firstReminder = false }, label = { Text("Tính từ lần đã chăm") })
+                        FilterChip(firstReminder, { firstReminder = true }, label = { Text("Chọn ngày nhắc đầu") })
+                    }
+                    OutlinedButton({ pickingDate = activeIndex }) {
+                        Text("${if (firstReminder) "Nhắc từ" else "Đã chăm sóc"}: ${plan.date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))}")
+                    }
+                }
+                if (custom) TextButton({
+                    if (activeIndex >= 0) updatePlans(plans.filterIndexed { i, _ -> i != activeIndex })
+                    else updateDisabledPlans(disabledPlans.filterIndexed { i, _ -> i != inactiveIndex })
+                    editingPlanName = null
+                    pickingDate = null
+                }) { Icon(Icons.Outlined.Delete, "Bỏ việc"); Text("Bỏ việc") }
+            } },
+            confirmButton = { TextButton({ editingPlanName = null }) { Text("Xong") } })
     }
     pickingDate?.let { index ->
         plans.getOrNull(index)?.let { plan ->
@@ -360,18 +541,17 @@ private val SpeciesSaver = Saver<Species, String>(save = { it.id }, restore = { 
         Column(if (fullScreen) Modifier.fillMaxSize().imePadding().navigationBarsPadding() else Modifier.fillMaxWidth()) {
         Column(
             (if (fullScreen) Modifier.weight(1f) else Modifier).fillMaxWidth().verticalScroll(formScroll)
-                .padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(if (fullScreen) 22.dp else 16.dp)
         ) {
-            if (fullScreen) TextButton({ if (step > 0) goToStep(step - 1) else onDismiss() }, enabled = !saving) {
-                Text(if (step > 0) "‹ Quay lại" else backLabel ?: if (initialCandidate != null) "‹ Quay lại kết quả" else "‹ Quay lại máy ảnh")
-            }
-            ScreenHeader("Thêm vào vườn", if (fullScreen) "Bước ${step + 1}/3 · ${listOf("Chọn cây", "Góc trồng", "Nhắc chăm")[step]}" else "Tạo hồ sơ riêng cho cây của bạn")
             if (fullScreen) {
-                LinearProgressIndicator(progress = { (step + 1) / 3f }, modifier = Modifier.fillMaxWidth())
-                Text(if (step == 0) "Bắt đầu với tên cây. Bạn có thể tra cứu hoặc tự nhập."
-                    else if (step == 1) "Đặt tên thân quen và chọn một góc cho cây. Các mục này đều tuỳ chọn."
-                    else "Chọn việc muốn được nhắc. Bạn có thể lưu cây mà chưa đặt lịch.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+                Box(Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                    IconButton({ if (step > 0) goToStep(step - 1) else requestDismiss() },
+                        Modifier.align(Alignment.CenterStart).size(48.dp).semantics { contentDescription = "Quay lại" }, enabled = !saving) {
+                        Text("‹", fontSize = 30.sp)
+                    }
+                    CompactProgress(step, Modifier.align(Alignment.Center))
+                }
+            } else ScreenHeader("Thêm vào vườn", "Tạo hồ sơ riêng cho cây của bạn")
             if (!fullScreen || step == 0) {
             scanHeader?.invoke()
             if (usingAi && initialCandidate != null) {
@@ -381,87 +561,105 @@ private val SpeciesSaver = Saver<Species, String>(save = { it.id }, restore = { 
                         Text("Độ chắc chắn của gợi ý: ${when (initialCandidate.confidence) { "high" -> "cao"; "medium" -> "vừa"; else -> "thấp — có thể nhầm loài" }}",
                             style = MaterialTheme.typography.bodySmall)
                         Text(initialCandidate.careTips, style = MaterialTheme.typography.bodySmall)
-                        TextButton({ usingAi = false; speciesName = ""; if (name == initialCandidate.name) name = ""; profile = emptyMap(); manualPlans = emptyList(); custom = true }, enabled = !saving) { Text("Bỏ gợi ý, tự nhập") }
+                        TextButton({
+                            cancelActiveLookup(clearError = true)
+                            val discarded = discardAiSuggestion(
+                                profile, editedFields, derivedFor, manualPlans, initialAiPlans, REFERENCE_KEYS
+                            )
+                            usingAi = false
+                            onAiSuggestionDiscarded()
+                            derivedFor = discarded.derivedFor
+                            editedFields = discarded.editedFields
+                            speciesName = ""
+                            updateNameForSpecies("")
+                            profile = discarded.profile
+                            manualPlans = discarded.manualPlans
+                            if (discarded.manualPlans.isEmpty()) {
+                                manualPlansSourceSpecies = ""
+                                manualPlansEdited = false
+                            } else manualPlansEdited = true
+                            custom = true
+                        }, enabled = !saving) { Text("Bỏ gợi ý, tự nhập") }
                     }
                 }
             }
-            if (fullScreen) Text("Bạn đang trồng cây gì?", style = MaterialTheme.typography.titleLarge)
-            else SectionHeading("01", "Bạn đang trồng cây gì?", "Chọn loài để tạo hồ sơ riêng")
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(custom, { custom = true; pickingDate = null }, label = { Text("Tự nhập tên loài") })
-                FilterChip(!custom, { lookupJob?.cancel(); looking = false; custom = false; matches = emptyList(); pickingDate = null }, label = { Text("Chọn từ danh sách") })
+            Text("Bạn thêm gì vào vườn?", style = MaterialTheme.typography.headlineMedium)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SpeciesGroup.entries.forEach { value ->
+                    Box(Modifier.weight(1f)) { CompactGroupCard(value, group == value, {
+                        if (group != value) {
+                            val cleaned = profileAfterGroupChange(profile, editedFields, group, value)
+                            profile = cleaned.profile
+                            editedFields = cleaned.editedFields
+                            cancelActiveLookup()
+                            sp = speciesAfterGroupChange(sp, value)
+                            group = value
+                            pickingDate = null
+                        }
+                    }) }
+                }
             }
-            if (!custom) {
-                var choosingSpecies by remember { mutableStateOf(false) }
-                Box {
-                    OutlinedButton({ choosingSpecies = true }, Modifier.fillMaxWidth()) { Text("${sp.emoji} ${sp.name}") }
-                    DropdownMenu(choosingSpecies, { choosingSpecies = false }) {
-                        SPECIES.forEach { s -> DropdownMenuItem(text = { Text("${s.emoji} ${s.name}") },
-                            onClick = { sp = s; pickingDate = null; choosingSpecies = false }) }
+            OutlinedTextField(if (custom) speciesName else sp.name, {
+                    cancelActiveLookup(clearError = true)
+                    val resolved = resolveSpeciesInput(sp, it, null)
+                    custom = resolved.custom
+                    speciesName = resolved.name
+                }, Modifier.fillMaxWidth(), singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    label = { Text(copy.speciesLabel) }, placeholder = { Text(copy.speciesPlaceholder) },
+                    isError = custom && (speciesName.trim().length > 120 || (attempted && speciesName.isBlank())),
+                    trailingIcon = { if (custom && group == SpeciesGroup.PLANT && speciesName.trim().length >= 2) {
+                        IconButton({ if (looking) cancelActiveLookup(clearError = true) else requestLookup() },
+                            enabled = !saving, modifier = Modifier.size(48.dp)) {
+                            if (looking) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            else Icon(Icons.Outlined.Search, contentDescription = "Tra cứu thông tin cây")
+                        }
+                    } },
+                    supportingText = { if (attempted && custom && speciesName.isBlank()) Text("Bạn chưa nhập tên cây. Chưa rõ loài thì dùng tên mô tả nhé.")
+                        else if (custom && speciesName.trim().length > 120) Text("Tên cây dài quá, bạn rút gọn còn tối đa 120 ký tự nhé.") })
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                speciesSuggestions(group, if (custom) speciesName else "").forEach { s ->
+                    CompactSpeciesRow(s, !custom && sp.id == s.id) {
+                        val speciesCleaned = clearStaleSpeciesData(s.name)
+                        updateNameForSpecies(s.name)
+                        profile = speciesCleaned.profile
+                        editedFields = speciesCleaned.editedFields
+                        derivedFor = s.name
+                        val resolved = resolveSpeciesInput(sp, speciesName, s)
+                        custom = resolved.custom
+                        speciesName = resolved.name
+                        sp = resolved.species
+                        pickingDate = null
                     }
                 }
             }
             if (custom) {
-                Text("Nhóm", style = MaterialTheme.typography.titleSmall)
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SpeciesGroup.entries.forEach { value ->
-                        FilterChip(group == value, { lookupJob?.cancel(); looking = false; matches = emptyList(); profile = emptyMap(); group = value }, label = { Text("${value.emoji} ${value.label}") })
-                    }
-                }
-                OutlinedTextField(speciesName, { lookupJob?.cancel(); looking = false; speciesName = it; matches = emptyList(); lookupError = null }, Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    label = { Text("Tên loài hoặc mô tả *") }, placeholder = { Text("VD: Cây kim tiền, cây lá tím chưa rõ tên") },
-                    isError = speciesName.trim().length > 120 || (attempted && speciesName.isBlank()),
-                    supportingText = { if (attempted && speciesName.isBlank()) Text("Bạn chưa nhập tên cây. Chưa rõ loài thì dùng tên mô tả nhé.")
-                        else if (speciesName.trim().length > 120) Text("Tên cây dài quá, bạn rút gọn còn tối đa 120 ký tự nhé.") })
                 if (group == SpeciesGroup.PLANT) {
-                    OutlinedButton({ requestLookup() }, enabled = !saving && !looking && speciesName.trim().length in 2..120, modifier = Modifier.fillMaxWidth()) {
-                        if (looking) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        else Text("Tra cứu thông tin cây")
-                    }
                     if (looking) {
-                        Text("Đang tìm gợi ý… Không cần chờ nếu bạn muốn tự nhập.", style = MaterialTheme.typography.bodySmall)
-                        TextButton({ lookupJob?.cancel(); looking = false; lookupError = null; matches = emptyList() }) {
-                            Text("Bỏ qua tra cứu, tiếp tục tự nhập")
-                        }
+                        Text("Đang tìm gợi ý…", style = MaterialTheme.typography.bodySmall)
                     }
-                    lookupError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    lookupError?.let { Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(it, Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        TextButton({ requestLookup() }) { Text("Thử lại") }
+                    } }
                     matches.forEach { match ->
                         OutlinedButton({
+                            val speciesCleaned = clearStaleSpeciesData(match.name)
                             speciesName = match.name
-                            if (name.isBlank()) name = match.name
-                            profile = profile + match.fields.filter { (key, _) -> key !in editedFields }
+                            updateNameForSpecies(match.name)
+                            profile = mergeLookupProfile(speciesCleaned.profile, speciesCleaned.editedFields, match.fields)
+                            editedFields = speciesCleaned.editedFields
+                            derivedFor = match.name
                             detailsExpanded = true
                             // Lookup enriches the profile; it must not erase a schedule the user wrote.
-                            if (manualPlans.isEmpty()) manualPlans = match.tasks.map { NewCare(it.first, it.second) }
-                            matches = emptyList()
+                            updateManualPlansFromLookup(match.name, match.tasks)
+                            lookupState = lookupState.copy(matches = emptyList())
                         }, Modifier.fillMaxWidth().heightIn(min = 72.dp), enabled = !saving) {
                             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("${match.name} · ${match.fields["scientificName"]}", style = MaterialTheme.typography.titleSmall)
+                                Text(lookupResultTitle(match.name, match.fields["scientificName"]), style = MaterialTheme.typography.titleSmall)
                                 Text("Chọn để điền thông tin tham khảo", style = MaterialTheme.typography.bodySmall)
                             }
                         }
-                    }
-                    TextButton({ detailsExpanded = !detailsExpanded }) { Text(if (detailsExpanded) "Thu gọn thông tin bổ sung" else "Thông tin bổ sung về cây") }
-                    if (detailsExpanded) {
-                    Text("Thông tin bổ sung về cây", style = MaterialTheme.typography.titleMedium)
-                    if (profile.none { (key,value) -> key in referenceKeys && value.isNotBlank() }) {
-                        TextButton({ requestLookup(fillSingleResult = true) }, enabled = !saving && !looking && speciesName.trim().length in 2..120) {
-                            Text("Điền gợi ý theo tên cây")
-                        }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(keepExtra, { keepExtra = it }, enabled = !saving)
-                        Text("Lưu kèm thông tin bổ sung", style = MaterialTheme.typography.bodyMedium)
-                    }
-                    Text("Không bắt buộc. Thông tin tra cứu là gợi ý để bạn xem và chỉnh lại.", style = MaterialTheme.typography.bodySmall)
-                    listOf("scientificName" to "Tên khoa học / loài", "cultivar" to "Giống (nếu biết)",
-                        "actualHeight" to "Chiều cao hiện tại (cm, tự đo)", "matureHeight" to "Chiều cao trưởng thành tham khảo",
-                        "humidity" to "Độ ẩm không khí phù hợp", "soil" to "Đất / giá thể và tưới", "light" to "Ánh sáng").forEach { (field,label) ->
-                        OutlinedTextField(profile[field].orEmpty(), { editedFields = editedFields + field; profile = profile + (field to it) }, Modifier.fillMaxWidth(), label = { Text(label) }, enabled = !saving,
-                            isError = profile[field].orEmpty().length > 1000, supportingText = { if (profile[field].orEmpty().length > 1000) Text("Bạn rút gọn còn tối đa 1000 ký tự nhé.") })
-                    }
-                    profile["source"]?.takeIf { it.isNotBlank() }?.let { Text("Nguồn tham khảo: $it", style = MaterialTheme.typography.bodySmall) }
                     }
                 }
             } else {
@@ -472,21 +670,55 @@ private val SpeciesSaver = Saver<Species, String>(save = { it.id }, restore = { 
             }
             if (!fullScreen || step == 1) {
             HorizontalDivider()
-            if (fullScreen) Text("Cây sẽ ở góc nào?", style = MaterialTheme.typography.titleLarge)
-            else SectionHeading("02", "Góc nhỏ của cây", "Một cái tên và nơi cây sẽ lớn lên")
+            if (fullScreen) Text(copy.stepTwoTitle, style = MaterialTheme.typography.headlineMedium)
+            else SectionHeading("02", if (profileGroup == SpeciesGroup.PLANT) "Góc nhỏ của cây" else copy.stepTwoTitle,
+                if (profileGroup == SpeciesGroup.PLANT) "Một cái tên và nơi cây sẽ lớn lên" else copy.stepTwoDescription)
             OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), singleLine = true,
                 shape = RoundedCornerShape(16.dp),
-                label = { Text("Tên gọi riêng (không bắt buộc)") }, placeholder = { Text("VD: Chậu ở bàn làm việc") },
+                label = { Text("Tên riêng (tuỳ chọn)") }, placeholder = { Text(if (profileGroup == SpeciesGroup.PLANT) "VD: Chậu bàn học" else "VD: Tên thân quen") },
                 isError = name.trim().length > 120,
-                supportingText = { Text(if (name.trim().length > 120) "Tên gọi tối đa 120 ký tự." else "Để trống sẽ dùng tên loài. Bạn có thể đổi tên sau.") })
+                supportingText = { Text(if (name.trim().length > 120) "Tên gọi tối đa 120 ký tự." else nameSaveHint ?: "Để trống sẽ dùng tên loài. Bạn có thể đổi tên sau.") })
+            val locationField = compactLocationField(profileGroup)
             OutlinedTextField(profile["location"].orEmpty(), { profile = profile + ("location" to it) }, Modifier.fillMaxWidth(),
-                singleLine = true, shape = RoundedCornerShape(16.dp), label = { Text("Vị trí đặt cây") }, placeholder = { Text("VD: Ban công, cạnh cửa sổ hướng đông") })
-            TextButton({ conditionsExpanded = !conditionsExpanded }) { Text(if (conditionsExpanded) "Thu gọn điều kiện trồng" else "＋ Thêm ánh sáng & giá thể") }
-            if (conditionsExpanded || !fullScreen) {
-            OutlinedTextField(profile["actualLight"].orEmpty(), { profile = profile + ("actualLight" to it) }, Modifier.fillMaxWidth(),
-                label = { Text("Ánh sáng nơi trồng") }, placeholder = { Text("VD: Nắng sáng 2 giờ, còn lại ánh sáng gián tiếp") })
-            OutlinedTextField(profile["pottingMix"].orEmpty(), { profile = profile + ("pottingMix" to it) }, Modifier.fillMaxWidth(),
-                label = { Text("Chậu & giá thể (không bắt buộc)") }, placeholder = { Text("VD: Chậu có lỗ thoát nước, đất trộn xơ dừa") })
+                singleLine = true, shape = RoundedCornerShape(18.dp), label = { Text(locationField.label) },
+                placeholder = { Text(locationField.placeholder) })
+            TextButton({ val open = !(conditionsExpanded || detailsExpanded); conditionsExpanded = open; detailsExpanded = open }) {
+                Text(if (conditionsExpanded || detailsExpanded) "Thu gọn chi tiết" else "＋ Thêm chi tiết")
+            }
+            if (conditionsExpanded || detailsExpanded || !fullScreen) {
+            compactDetailFields(profileGroup).forEach { field ->
+                val value = profile[field.key].orEmpty()
+                OutlinedTextField(value, {
+                    if (field.key == "actualHeight") {
+                        val edit = updateProfileField(profile, editedFields, field.key, it)
+                        profile = edit.profile
+                        editedFields = edit.editedFields
+                    } else profile = profile + (field.key to it)
+                }, Modifier.fillMaxWidth(), singleLine = field.singleLine, shape = RoundedCornerShape(16.dp),
+                    label = { Text(field.label) }, placeholder = { if (field.placeholder.isNotEmpty()) Text(field.placeholder) },
+                    keyboardOptions = if (field.numeric) KeyboardOptions(keyboardType = KeyboardType.Number) else KeyboardOptions.Default,
+                    isError = profileGroup != SpeciesGroup.PLANT && value.length > 1000,
+                    supportingText = if (profileGroup != SpeciesGroup.PLANT && value.length > 1000) ({ Text("Bạn rút gọn còn tối đa 1000 ký tự nhé.") }) else null)
+            }
+            if (profileGroup == SpeciesGroup.PLANT && custom) {
+                Text("Thông tin bổ sung về cây", style = MaterialTheme.typography.titleMedium)
+                if (profile.none { (key,value) -> key in REFERENCE_KEYS && value.isNotBlank() }) {
+                    TextButton({ requestLookup(fillSingleResult = true) }, enabled = !saving && !looking && speciesName.trim().length in 2..120) {
+                        Text("Điền gợi ý theo tên cây")
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(keepExtra, { keepExtra = it }, enabled = !saving)
+                    Text("Lưu kèm thông tin bổ sung", style = MaterialTheme.typography.bodyMedium)
+                }
+                listOf("scientificName" to "Tên khoa học / loài", "cultivar" to "Giống (nếu biết)",
+                    "matureHeight" to "Chiều cao trưởng thành tham khảo", "humidity" to "Độ ẩm không khí phù hợp",
+                    "soil" to "Đất / giá thể và tưới", "light" to "Ánh sáng").forEach { (field,label) ->
+                    OutlinedTextField(profile[field].orEmpty(), { editedFields = editedFields + field; profile = profile + (field to it) }, Modifier.fillMaxWidth(), label = { Text(label) }, enabled = !saving,
+                        isError = profile[field].orEmpty().length > 1000, supportingText = { if (profile[field].orEmpty().length > 1000) Text("Bạn rút gọn còn tối đa 1000 ký tự nhé.") })
+                }
+                profile["source"]?.takeIf { it.isNotBlank() }?.let { Text("Nguồn tham khảo: $it", style = MaterialTheme.typography.bodySmall) }
+            }
             }
             if (zones.isNotEmpty()) {
                 Text("Khu vực", style = MaterialTheme.typography.titleSmall)
@@ -499,56 +731,46 @@ private val SpeciesSaver = Saver<Species, String>(save = { it.id }, restore = { 
                 Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     EmojiAvatar("🌿", null, 44.dp)
                     Column(Modifier.weight(1f)) {
-                        Text(name.trim().ifEmpty { if (custom) speciesName.trim() else sp.name }, style = MaterialTheme.typography.titleMedium)
+                        Text(finalPlantName, style = MaterialTheme.typography.titleMedium)
                         Text(profile["location"].orEmpty().ifBlank { "Chưa chọn vị trí · bổ sung sau" }, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
-            if (fullScreen) Text("Lịch chăm cây", style = MaterialTheme.typography.titleMedium)
-            else SectionHeading("03", "Chăm theo nhịp của bạn", "Chọn việc cần nhắc, không bắt buộc phải có lịch")
-            Text("Đặt lịch kiểm tra cây; chỉ tưới hoặc bón khi cây cần.", style = MaterialTheme.typography.bodySmall)
-            if (custom && group == SpeciesGroup.PLANT) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("Kiểm tra độ ẩm đất" to 3, "Kiểm tra dinh dưỡng" to 30).forEach { (task, days) ->
-                    AssistChip({ if (plans.none { it.name == task }) updatePlans(plans + NewCare(task, days)) }, label = { Text("＋ $task") })
+            if (fullScreen) Text(copy.stepThreeTitle, style = MaterialTheme.typography.headlineMedium)
+            else SectionHeading("03", if (profileGroup == SpeciesGroup.PLANT) "Chăm theo nhịp của bạn" else copy.stepThreeTitle,
+                "Chọn việc cần nhắc, không bắt buộc phải có lịch")
+            if (!fullScreen) Text(copy.stepThreeDescription, style = MaterialTheme.typography.bodySmall)
+            val careRows = plans + disabledPlans + groupCareSuggestions(profileGroup)
+                .filter { (task, _) -> (plans + disabledPlans).none { it.name == task } }
+                .map { (task, days) -> NewCare(task, days) }
+            careRows.forEach { plan ->
+                CompactTaskRow(plan.name.ifBlank { "(Chưa đặt tên)" }, plan.days,
+                    plans.contains(plan),
+                    { enabled -> togglePlan(plan, enabled) }, { editingPlanName = plan.name })
+            }
+            Box {
+                TextButton({ addCareMenu = true }) { Text("＋ Thêm việc khác") }
+                DropdownMenu(addCareMenu, { addCareMenu = false }) {
+                    groupCareSuggestions(profileGroup).filter { (task, _) -> (plans + disabledPlans).none { it.name == task } }
+                        .forEach { (task, days) ->
+                            DropdownMenuItem(text = { Text(task) }, onClick = {
+                                if (plans.size < 30) updatePlans(plans + NewCare(task, days))
+                                addCareMenu = false
+                            })
+                        }
+                    DropdownMenuItem(text = { Text("Việc tự đặt…") }, onClick = {
+                        draftPlanName = ""; draftPlanDays = 7; creatingPlan = true; addCareMenu = false
+                    })
                 }
             }
-            if (plans.isNotEmpty()) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(!firstReminder, { firstReminder = false }, label = { Text("Tính từ lần đã chăm") })
-                FilterChip(firstReminder, { firstReminder = true }, label = { Text("Chọn ngày nhắc đầu") })
-            }
-            plans.forEachIndexed { index, plan ->
-                OutlinedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (custom) Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(plan.name, { updatePlan(index, plan.copy(name = it)) }, Modifier.weight(1f),
-                        singleLine = true, label = { Text("Tên việc *") }, placeholder = { Text("VD: Tưới nước, thay nước") },
-                        isError = plan.name.isBlank() || plan.name.trim().length > 120,
-                        supportingText = { if (plan.name.isBlank()) Text("Nhập tên việc hoặc bấm thùng rác để bỏ lịch này.") })
-                    IconButton({ updatePlans(plans.filterIndexed { i, _ -> i != index }); pickingDate = null }) {
-                        Icon(Icons.Outlined.Delete, "Bỏ việc")
-                    }
-                }
-                CycleStepper(if (custom) "Lặp lại mỗi" else "${taskEmoji(plan.name)} ${plan.name}", plan.days) {
-                    updatePlan(index, plan.copy(days = it))
-                }
-                OutlinedButton({ pickingDate = index }) {
-                    Text("${if (firstReminder) "Nhắc từ" else "Đã chăm sóc"}: ${plan.date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))}")
-                }
-                }
-                }
-            }
-            if (plans.isNotEmpty()) TextButton({ updatePlans(emptyList()); pickingDate = null }) { Text("Chưa cần nhắc, đặt lịch sau") }
-            if (custom) {
-                OutlinedButton({ updatePlans(plans + NewCare("", 7)) }) { Text("＋ Thêm việc chăm sóc") }
-                if (plans.isEmpty()) Text("Chưa có lịch nhắc. Bạn vẫn có thể lưu và ghi nhật ký.", style = MaterialTheme.typography.bodySmall)
-            }
+            if (plans.isEmpty()) Text("Chưa có lịch nhắc. Bạn vẫn có thể lưu và ghi nhật ký.", style = MaterialTheme.typography.bodySmall)
             if (invalidDates) Text("Lần chăm sóc gần nhất không thể ở tương lai.", color = MaterialTheme.colorScheme.error)
             if (name.trim().length > 120 || plans.any { it.name.trim().length > 120 }) Text("Tên cây và tên việc tối đa 120 ký tự.", color = MaterialTheme.colorScheme.error)
-            if (profile.values.any { it.length > 1000 }) Text("Mỗi thông tin mô tả tối đa 1000 ký tự.", color = MaterialTheme.colorScheme.error)
+            if (hasOversizedProfileValue(savedProfile)) Text("Mỗi thông tin mô tả tối đa 1000 ký tự.", color = MaterialTheme.colorScheme.error)
             if (plans.size > 30) Text("Mỗi cây có tối đa 30 việc chăm sóc.", color = MaterialTheme.colorScheme.error)
             if (plans.isNotEmpty()) Text("Ngày này chỉ dùng để lập lịch, không tạo lịch sử hoàn thành.", style = MaterialTheme.typography.bodySmall)
             saveError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            Text(if (plans.isEmpty()) "Sẽ lưu hồ sơ cây, chưa tạo lịch nhắc." else "Sẽ lưu hồ sơ cây và ${plans.size} việc chăm sóc.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(if (plans.isEmpty()) "${copy.saveSummaryPrefix}, chưa tạo lịch nhắc." else "${copy.saveSummaryPrefix} và ${plans.size} việc chăm sóc.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (custom && speciesName.isBlank()) Text("Nhập tên loài hoặc mô tả ở mục 01 để thêm vào vườn.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (plans.any { it.name.isBlank() }) Text("Có việc chăm sóc chưa có tên. Điền tên việc hoặc bỏ việc đó để lưu.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             if (!fullScreen) Button({ submit() }, Modifier.fillMaxWidth().heightIn(min = 52.dp), enabled = valid && !saving) {
@@ -558,24 +780,23 @@ private val SpeciesSaver = Saver<Species, String>(save = { it.id }, restore = { 
             }
         }
         if (fullScreen) Surface(shadowElevation = 4.dp, color = MaterialTheme.colorScheme.surface) {
-            Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (step > 0) OutlinedButton({ goToStep(step - 1) }, Modifier.weight(1f).heightIn(min = 52.dp), enabled = !saving) { Text("Quay lại") }
-                Button({
+            Row(Modifier.fillMaxWidth().padding(16.dp)) {
+                CompactPrimaryButton(if (step < 2) "Tiếp tục" else "Thêm vào vườn", !saving && !looking,
+                    Modifier.fillMaxWidth(), loading = saving) {
                     attempted = true
                     if (custom && speciesName.trim().length !in 1..120) { goToStep(0); scope.launch { formScroll.scrollTo(0) } }
-                    else if (profile.values.any { it.length > 1000 }) {
-                        val referenceInvalid = profile.any { (key,value) -> key in referenceKeys && value.length > 1000 }
+                    else if (!profileValid) {
+                        val referenceInvalid = savedProfile.any { (key,value) -> key in REFERENCE_KEYS && value.length > 1000 }
                         detailsExpanded = referenceInvalid; conditionsExpanded = !referenceInvalid
                         goToStep(if (referenceInvalid) 0 else 1)
                     }
                     else if (name.trim().length > 120 && step > 0) { goToStep(1) }
                     else if (step < 2 && canContinue) { attempted = false; goToStep(step + 1) }
-                    else if (valid) { focus.clearFocus(); reviewing = true }
+                    else if (valid) {
+                        focus.clearFocus()
+                        reviewing = true
+                    }
                     else { goToStep(2); scope.launch { formScroll.scrollTo(0) } }
-                }, Modifier.weight(1.6f).heightIn(min = 52.dp),
-                    enabled = !saving && !looking, shape = RoundedCornerShape(16.dp)) {
-                    if (saving) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    else Text(if (step < 2) "Tiếp tục" else "Thêm vào vườn")
                 }
             }
         }
@@ -585,22 +806,26 @@ private val SpeciesSaver = Saver<Species, String>(save = { it.id }, restore = { 
         title = { Text("Xem lại trước khi lưu") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                ProfileInfo("Tên trong vườn", name.trim().ifEmpty { if (custom) speciesName.trim() else sp.name })
+                ProfileInfo("Tên trong vườn", finalPlantName)
                 ProfileInfo("Loài", if (custom) speciesName.trim() else sp.name)
-                ProfileInfo("Vị trí", profile["location"].orEmpty().ifBlank { "Chưa thêm" })
-                profile["actualLight"]?.takeIf { it.isNotBlank() }?.let { ProfileInfo("Ánh sáng nơi trồng",it) }
-                profile["pottingMix"]?.takeIf { it.isNotBlank() }?.let { ProfileInfo("Chậu và giá thể",it) }
+                if (profileGroup == SpeciesGroup.PLANT) {
+                    ProfileInfo("Vị trí", savedProfile["location"].orEmpty().ifBlank { "Chưa thêm" })
+                    savedProfile["actualLight"]?.takeIf { it.isNotBlank() }?.let { ProfileInfo("Ánh sáng nơi trồng",it) }
+                    savedProfile["pottingMix"]?.takeIf { it.isNotBlank() }?.let { ProfileInfo("Chậu và giá thể",it) }
+                } else groupFields(profileGroup).forEach { field ->
+                    savedProfile[field.key]?.takeIf { it.isNotBlank() }?.let { ProfileInfo(field.reviewLabel, it) }
+                }
                 zoneId?.let { id -> zones.find { it.id == id }?.let { ProfileInfo("Khu vực", it.name) } }
                 Text(if (plans.isEmpty()) "Chưa đặt lịch nhắc" else "Lịch nhắc", style = MaterialTheme.typography.titleSmall)
                 plans.forEach { Text("${it.name} · mỗi ${it.days} ngày · ${it.date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))}", style = MaterialTheme.typography.bodySmall) }
-                if (profile.any { (key,value) -> key in referenceKeys && value.isNotBlank() }) {
+                if (profileGroup == SpeciesGroup.PLANT && profile.any { (key,value) -> key in REFERENCE_KEYS && value.isNotBlank() }) {
                     HorizontalDivider()
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(keepExtra, { keepExtra = it }, enabled = !saving)
+                        Checkbox(keepExtra, { keepExtra = it }, modifier = Modifier.semantics { contentDescription = "Lưu thông tin bổ sung về cây" }, enabled = !saving)
                         Text("Lưu thông tin bổ sung về cây", style = MaterialTheme.typography.bodyMedium)
                     }
                     listOf("scientificName" to "Tên khoa học", "cultivar" to "Giống", "actualHeight" to "Chiều cao hiện tại (cm)", "matureHeight" to "Chiều cao trưởng thành", "humidity" to "Độ ẩm không khí", "soil" to "Đất và tưới", "light" to "Ánh sáng", "source" to "Nguồn gợi ý").forEach { (key,label) ->
-                        profile[key]?.takeIf { it.isNotBlank() }?.let { ProfileInfo(label,it) }
+                        savedProfile[key]?.takeIf { it.isNotBlank() }?.let { ProfileInfo(label,it) }
                     }
                 }
                 saveError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -608,9 +833,35 @@ private val SpeciesSaver = Saver<Species, String>(save = { it.id }, restore = { 
         },
         confirmButton = { TextButton({ if (valid && !saving) submit() }, enabled = valid && !saving) { Text(if (saving) "Đang lưu…" else "Xác nhận lưu") } },
         dismissButton = { TextButton({ reviewing = false }, enabled = !saving) { Text("Chỉnh lại") } })
+    if (confirmDiscard) AlertDialog(
+        onDismissRequest = { if (!saving) confirmDiscard = false },
+        title = { Text("Bỏ bản nhập?") },
+        text = { Text("Thông tin chưa lưu sẽ bị mất.") },
+        confirmButton = {
+            TextButton(onClick = { if (!saving) { confirmDiscard = false; onDismiss() } }, enabled = !saving) {
+                Text("Bỏ")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { if (!saving) confirmDiscard = false }, enabled = !saving) {
+                Text("Tiếp tục nhập")
+            }
+        }
+    )
     if (fullScreen) Surface(Modifier.fillMaxSize()) { form() }
-    else ModalBottomSheet(onDismissRequest = { if (!saving) onDismiss() },
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) { form() }
+    else ModalBottomSheet(onDismissRequest = { requestDismiss() },
+        sheetState = rememberModalBottomSheetState(
+            skipPartiallyExpanded = true,
+            confirmValueChange = { target ->
+                if (target == SheetValue.Hidden) {
+                    if (saving) false
+                    else if (hasUnsavedDraft(currentDraft, initialDraft)) {
+                        confirmDiscard = true
+                        false
+                    } else true
+                } else true
+            }
+        )) { form() }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -621,14 +872,21 @@ private val SpeciesSaver = Saver<Species, String>(save = { it.id }, restore = { 
     }.getOrDefault(emptyMap<String,String>())) }
     var name by remember { mutableStateOf(item.name) }
     val species = findSpecies(item.speciesId)
-    val customGroup = SpeciesGroup.entries.firstOrNull { item.speciesId.startsWith("custom:${it.name}:") }
+    val itemGroup = species?.group ?: SpeciesGroup.PLANT
+    val customGroup = itemGroup.takeIf { item.speciesId.startsWith("custom:${it.name}:") }
     var speciesName by remember { mutableStateOf(species?.name.orEmpty()) }
     var zoneId by remember { mutableStateOf(item.zoneId) }
     val cycles = remember { mutableStateMapOf<Long, Int>() }
     var newName by remember { mutableStateOf("") }
     var newDays by remember { mutableIntStateOf(7) }
     var pickedType by remember { mutableStateOf<TaskType?>(null) }
+    var deletingTask by remember(item.id) { mutableStateOf<CareTask?>(null) }
     val effType = pickedType ?: TaskType.infer(newName) // chưa chọn thì đoán theo tên
+    val profileToEdit = if (itemGroup == SpeciesGroup.PLANT) profile else profileToSave(profile, true, itemGroup)
+    val editProfileValid = editProfileIsValid(profileToEdit)
+    val warnReviewProfile = customGroup != null && shouldRemindReviewProfileAfterSpeciesRename(
+        species?.name.orEmpty(), speciesName, profile, REFERENCE_KEYS
+    )
     LaunchedEffect(item.id) { vm.clearEditError() }
     ModalBottomSheet(onDismissRequest = { if (!vm.editing) onDismiss() }) {
         Column(
@@ -638,27 +896,40 @@ private val SpeciesSaver = Saver<Species, String>(save = { it.id }, restore = { 
         ) {
             Text("Sửa thông tin", style = MaterialTheme.typography.headlineSmall)
             OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Tên gọi") })
-            if (profile.isNotEmpty()) {
-                Text("Thông tin cây", style = MaterialTheme.typography.titleSmall)
-                listOf("scientificName" to "Tên khoa học", "cultivar" to "Giống", "actualHeight" to "Chiều cao hiện tại (cm)",
+            if (profile.isNotEmpty() || itemGroup != SpeciesGroup.PLANT) {
+                Text(groupCopy(itemGroup).detailTitle, style = MaterialTheme.typography.titleSmall)
+                if (itemGroup == SpeciesGroup.PLANT) listOf("scientificName" to "Tên khoa học", "cultivar" to "Giống", "actualHeight" to "Chiều cao hiện tại (cm)",
                     "matureHeight" to "Chiều cao trưởng thành tham khảo", "humidity" to "Độ ẩm không khí", "soil" to "Đất / tưới", "light" to "Ánh sáng", "location" to "Vị trí đặt cây", "actualLight" to "Ánh sáng nơi trồng", "pottingMix" to "Chậu & giá thể").forEach { (key,label) ->
-                    OutlinedTextField(profile[key].orEmpty(), { profile = profile + (key to it) }, Modifier.fillMaxWidth(), label = { Text(label) })
+                    val value = profile[key].orEmpty()
+                    OutlinedTextField(value, { profile = profile + (key to it) }, Modifier.fillMaxWidth(), label = { Text(label) },
+                        isError = value.length > 1000,
+                        supportingText = { if (value.length > 1000) Text("Bạn rút gọn còn tối đa 1000 ký tự nhé.") })
+                }
+                else groupFields(itemGroup).map { it.key to it.label }.forEach { (key,label) ->
+                    val value = profile[key].orEmpty()
+                    OutlinedTextField(value, { profile = profile + (key to it) }, Modifier.fillMaxWidth(), label = { Text(label) },
+                        isError = value.length > 1000,
+                        supportingText = { if (value.length > 1000) Text("Bạn rút gọn còn tối đa 1000 ký tự nhé.") })
                 }
             }
             if (customGroup != null) OutlinedTextField(speciesName, { speciesName = it }, Modifier.fillMaxWidth(),
-                singleLine = true, label = { Text("Tên loài hoặc mô tả *") })
+                singleLine = true, label = { Text(groupCopy(itemGroup).speciesLabel) })
+            if (warnReviewProfile) Text("Tên loài đã đổi. Thông tin tham khảo vẫn được giữ; hãy rà lại cho phù hợp.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+            if (!editProfileValid) Text("Mỗi thông tin mô tả tối đa 1000 ký tự.", color = MaterialTheme.colorScheme.error)
             if (zones.isNotEmpty()) ZonePicker(zones, zoneId) { zoneId = it }
             tasks.forEach { t ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f)) {
                         CycleStepper("${t.icon()} ${t.name}", cycles[t.id] ?: t.everyDays) { cycles[t.id] = it }
                     }
-                    IconButton({ vm.removeTask(t) }) { Icon(Icons.Outlined.Delete, "Xoá việc") }
+                    IconButton({ deletingTask = t }) { Icon(Icons.Outlined.Delete, "Xoá việc") }
                 }
             }
             HorizontalDivider()
             Text("Thêm việc mới", style = MaterialTheme.typography.titleSmall)
-            OutlinedTextField(newName, { newName = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Tên việc (VD: Phun sương)") })
+            OutlinedTextField(newName, { newName = it }, Modifier.fillMaxWidth(), singleLine = true,
+                label = { Text(if (itemGroup == SpeciesGroup.PLANT) "Tên việc (VD: Phun sương)" else "Tên việc (VD: Cho ăn, thay nước)") })
             Text("Loại việc", style = MaterialTheme.typography.labelLarge)
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TaskType.entries.forEach { ty ->
@@ -673,8 +944,27 @@ private val SpeciesSaver = Saver<Species, String>(save = { it.id }, restore = { 
             Button({
                 val speciesId = if (customGroup != null) customSpecies(speciesName, customGroup).id else item.speciesId
                 vm.saveEdit(item, name.trim().ifEmpty { item.name }, zoneId, speciesId,
-                    if (profile.isEmpty()) "" else JSONObject(profile).toString(), cycles.toMap(), onDismiss)
-            }, Modifier.fillMaxWidth().height(52.dp), enabled = !vm.editing && name.trim().length <= 120 && (customGroup == null || speciesName.trim().length in 1..120)) { Text(if (vm.editing) "Đang lưu…" else "Lưu") }
+                    if (profileToEdit.isEmpty()) "" else JSONObject(profileToEdit).toString(), cyclesForExistingTasks(cycles.toMap(), tasks.map { it.id }.toSet()), onDismiss)
+            }, Modifier.fillMaxWidth().height(52.dp), enabled = !vm.editing && editProfileValid && name.trim().length <= 120 && (customGroup == null || speciesName.trim().length in 1..120)) { Text(if (vm.editing) "Đang lưu…" else "Lưu") }
         }
+    }
+    deletingTask?.let { task ->
+        AlertDialog(
+            onDismissRequest = { deletingTask = null },
+            title = { Text("Xoá việc chăm sóc?") },
+            text = { Text("Bạn có chắc muốn xoá ‘${task.name}’?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    resolveTaskDeletion(deletingTask, confirmed = true, removeTask = vm::removeTask)
+                    deletingTask = null
+                }) { Text("Xoá") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    resolveTaskDeletion(deletingTask, confirmed = false, removeTask = vm::removeTask)
+                    deletingTask = null
+                }) { Text("Huỷ") }
+            }
+        )
     }
 }

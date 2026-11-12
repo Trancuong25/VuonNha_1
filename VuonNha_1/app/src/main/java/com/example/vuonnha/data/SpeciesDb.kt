@@ -3,7 +3,8 @@ package com.example.vuonnha.data
 // Cơ sở dữ liệu kiến thức chăm sóc. Thêm loài = thêm 1 dòng.
 data class Species(
     val id: String, val name: String, val tip: String,
-    val tasks: List<Pair<String, Int>>, val emoji: String = "🌿", val profileJson: String = ""
+    val tasks: List<Pair<String, Int>>, val emoji: String = "🌿", val profileJson: String = "",
+    val group: SpeciesGroup = SpeciesGroup.PLANT
 )
 
 val SPECIES = listOf(
@@ -11,10 +12,10 @@ val SPECIES = listOf(
     Species("sen", "Sen đá", "Nhiều nắng, đất thoát nước tốt.", listOf("Tưới nước" to 10, "Bón phân" to 60), "🌵"),
     Species("lan", "Lan hồ điệp", "Không để đọng nước ở nõn.", listOf("Tưới nước" to 5, "Bón phân" to 14), "🌸"),
     Species("basil", "Húng quế", "Giữ đất ẩm nhẹ; bấm ngọn thường xuyên để ra nhiều nhánh.", listOf("Tưới nước" to 2, "Bón phân" to 14), "🌿"),
-    Species("betta", "Cá betta", "Thay 25–30% nước, khử clo.", listOf("Thay nước" to 5, "Vệ sinh bể" to 14), "🐟"),
-    Species("vang", "Cá vàng", "Cần lọc mạnh.", listOf("Thay nước" to 7, "Vệ sinh lọc" to 21), "🐠"),
-    Species("guppy", "Cá bảy màu", "Thay 20–30% nước mỗi tuần, khử clo.", listOf("Thay nước" to 7, "Vệ sinh lọc" to 21), "🐟"),
-    Species("hamster", "Hamster", "Không tắm nước, dùng cát tắm.", listOf("Thay lót chuồng" to 7, "Tắm cát" to 4), "🐹"),
+    Species("betta", "Cá betta", "Thay 25–30% nước, khử clo.", listOf("Thay nước" to 5, "Vệ sinh bể" to 14), "🐟", group = SpeciesGroup.FISH),
+    Species("vang", "Cá vàng", "Cần lọc mạnh.", listOf("Thay nước" to 7, "Vệ sinh lọc" to 21), "🐠", group = SpeciesGroup.FISH),
+    Species("guppy", "Cá bảy màu", "Thay 20–30% nước mỗi tuần, khử clo.", listOf("Thay nước" to 7, "Vệ sinh lọc" to 21), "🐟", group = SpeciesGroup.FISH),
+    Species("hamster", "Hamster", "Không tắm nước, dùng cát tắm.", listOf("Thay lót chuồng" to 7, "Tắm cát" to 4), "🐹", group = SpeciesGroup.PET),
 )
 enum class SpeciesGroup(val label: String, val emoji: String) {
     PLANT("Cây cảnh", "🪴"), FISH("Cá cảnh", "🐟"), PET("Thú cưng", "🐾")
@@ -26,7 +27,7 @@ fun customSpecies(name: String, group: SpeciesGroup, tasks: List<Pair<String, In
     require(label.isNotBlank())
     require(tasks.all { it.first.isNotBlank() && it.second > 0 })
     return Species("custom:${group.name}:$label", label,
-        "Loài do bạn nhập. Hãy đặt lịch theo nhu cầu thực tế; ứng dụng chưa có hướng dẫn riêng cho loài này.", tasks, group.emoji)
+        "Loài do bạn nhập. Hãy đặt lịch theo nhu cầu thực tế; ứng dụng chưa có hướng dẫn riêng cho loài này.", tasks, group.emoji, group = group)
 }
 
 fun findSpecies(id: String): Species? {

@@ -14,7 +14,8 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.work.*
 import com.example.vuonnha.data.AppDb
-import com.example.vuonnha.domain.daysLeft
+import com.example.vuonnha.domain.dueTasksForReminder
+import com.example.vuonnha.domain.shouldSendReminder
 import com.example.vuonnha.domain.startOfDay
 import com.example.vuonnha.ui.MainActivity
 import java.util.Calendar
@@ -80,7 +81,7 @@ class ReminderWorker(ctx: Context, p: WorkerParameters) : CoroutineWorker(ctx, p
     private suspend fun notifyIfNeeded(force: Boolean) {
         val prefs = applicationContext.getSharedPreferences("reminder", Context.MODE_PRIVATE)
         val today = startOfDay()
-        if (!force && prefs.getLong("last", 0L) == today) return
+        if (!shouldSendReminder(prefs.getLong("last", 0L), today, force)) return
 
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -88,7 +89,7 @@ class ReminderWorker(ctx: Context, p: WorkerParameters) : CoroutineWorker(ctx, p
 
         val dao = AppDb.get(applicationContext).dao()
         val items = dao.itemsOnce().associateBy { it.id }
-        val due = dao.tasksOnce().filter { it.daysLeft() <= 0 && items.containsKey(it.itemId) }
+        val due = dueTasksForReminder(dao.tasksOnce(), items.keys, today)
         if (due.isEmpty() && !force) return
 
         val title = if (due.isEmpty()) "Thông báo thử" else "Hôm nay có ${due.size} việc chăm sóc"

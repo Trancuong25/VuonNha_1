@@ -43,7 +43,7 @@ private class Ctx(val items: Map<Long, Item>, val zones: Map<Long, Zone>, val fc
     val late = remember(sorted) { sorted.filter { it.daysLeft() < 0 } }
     val dueToday = remember(sorted) { sorted.filter { it.daysLeft() == 0 } }
     val soon = remember(sorted) { sorted.filter { it.daysLeft() > 0 } }
-    val date = remember { SimpleDateFormat("EEEE, dd/MM", Locale("vi", "VN")).format(Date()).replaceFirstChar { it.uppercase() } }
+    val date = remember { SimpleDateFormat("EEEE, dd/MM", Locale.forLanguageTag("vi-VN")).format(Date()).replaceFirstChar { it.uppercase() } }
 
     LazyColumn(
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 24.dp),
