@@ -1111,3 +1111,11 @@ Tất cả đang hoạt động và có test; đọc mã để liệt kê đủ,
 - Tạo bản trình bày riêng từ bản mở rộng để giữ nguyên bản gốc và bản mở rộng. Duy trì nội dung bốn chương, bảng biểu và sơ đồ đã có; đặt lại giãn dòng/khoảng cách đoạn, khôi phục cấp tiêu đề mục con và cập nhật mục lục.
 - Chèn thêm hai sơ đồ quy trình “Luồng thêm và lưu hồ sơ cây” và “Luồng sao lưu và xử lý revision”; không tạo ảnh chụp ứng dụng giả. Bản đầu ra: `C:\Users\DELL\Downloads\Bao_Cao_Cay_Trong_ban_trinh_bay.docx`.
 - Mở lại và lưu bằng Word; kiểm tra XML của DOCX xác nhận hai chú thích sơ đồ mới, nội dung không còn cụm quản lý chi tiêu/React Native và các hình nhúng được giữ. Không chạy build/test vì chỉ chỉnh tài liệu. Số trang cuối chưa xác minh được tự động do Word COM ngắt kết nối khi lấy số trang; đề nghị mở bản đầu ra để kiểm tra trực quan trang mục lục và vị trí hình.
+
+## Cập nhật 12/11/2026 — chuẩn bị đồng bộ repo GitHub
+
+- Đã fetch `origin/main`; remote có `c44d979` và `1a6a558`. Local `ea4f240` cùng các commit cha của nó vẫn được giữ. Hai lịch sử không có merge base chung.
+- Cây tích hợp giữ nội dung project mới nhất từ thư mục local `VuonNha_1/` và đặt lại ở gốc theo cấu trúc GitHub. Các file chỉ có trên GitHub được giữ; `.gitignore` bao gồm quy tắc project và log ngoài project. Checkout lồng trên đĩa được giữ lại, còn metadata Git lồng và file bị ignore không được đưa vào cây publish.
+- Thay đổi staged: di chuyển các file project sang gốc, cập nhật `.gitignore`, `AGENTS.md`, README và mã/test local; xóa các file IDE local khỏi cây publish.
+- Lệnh đã chạy: `git fetch origin` thành công; kiểm tra status, lịch sử, đường dẫn hai cây; `git diff --cached --check` không báo lỗi. Chưa chạy test/build vì lượt này chỉ xử lý tích hợp Git.
+- Tích hợp đang ở nhánh `codex/integrate-origin-main`; chưa tạo merge commit hoặc push. Bước tiếp theo: hoàn tất kiểm tra cây staged, tạo merge commit và push fast-forward lên `origin/main`.

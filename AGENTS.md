@@ -1,53 +1,88 @@
-# AGENTS.md
+# AGENTS.md — Quy tắc chung cho Codex và Antigravity
 
-Android (Kotlin/Compose) app + local Node.js backend for the "Vườn Nhà" plant-care app. This file covers workspace-level gotchas. Deeper rules and architecture live in `VuonNha_1/AGENTS.md`, `VuonNha_1/README.md`, `VuonNha_1/docs/ARCHITECTURE.md`, and `VuonNha_1/backend/README.md` — read those before changing behavior.
+Tài liệu này áp dụng cho mọi AI agent làm việc trên project VuonNha_1. Codex hiện là agent đang thực hiện nhiệm vụ; Antigravity cũng có thể làm việc trong các phân vùng trách nhiệm bên dưới.
+Cập nhật lần đầu: 21/10/2026 · Antigravity
 
-## Layout / git
+---
 
-- The opencode workspace root (`D:\Hoc_Tap\VuonNha_1`) is **not** the Android project. Run all Gradle/backend commands from `VuonNha_1/` (use the `workdir` param; there is no Gradle wrapper at the root).
-- Two nested git repos exist. `VuonNha_1/.git` holds the real history; the outer repo tracks the whole folder as plain files. **Commit project changes from `VuonNha_1/`** and inspect `git -C VuonNha_1 status` / `git -C VuonNha_1 diff` before committing.
-- Root-level `*.log` and `anr-*.txt` are debug artifacts, already gitignored. Never commit `.env`, `VuonNha_1/backend/data/`, `local.properties`, `app/build/`, `.idea/`, `.kotlin/`, or `node_modules/`.
-- `VuonNha_1/AGENTS.md` currently says Room is v4; the code is actually **v5** (`data/AppDb.kt`, `MIGRATION_4_5` adds `Item.profileJson`). Any schema change needs a new migration + test.
+## 1. Nguyên tắc bất biến
 
-## Commands (workdir `VuonNha_1`)
+| Quy tắc | Chi tiết |
+|---|---|
+| **Không thay đổi kiến trúc** | Giữ nguyên phân lớp: Android Compose / Room / Domain / Node.js backend. Mọi tính năng mới phải đúng lớp. |
+| **Không đổi database schema** | Room hiện ở v5 (`data/AppDb.kt`, `MIGRATION_4_5`). Thêm migration là thay đổi schema — chỉ Codex được phép khi có kế hoạch rõ ràng. |
+| **Không đổi API contract** | Endpoint backend (`server.mjs`) và kiểu dữ liệu giữa Android ↔ backend không được đổi unilaterally. |
+| **Không đổi dependencies** | `gradle/libs.versions.toml` và `backend/package.json` chỉ cập nhật khi cần thiết, không nâng version tự ý. |
+| **Không đọc/hiển thị bí mật** | `.env`, API key, token, mật khẩu, session token — không đọc, không log, không commit. |
+| **Không xóa dữ liệu** | Không `git clean`, `git reset --hard`, không xóa `backend/data/`, ảnh nhật ký hay AVD. |
 
-```powershell
-# JVM unit tests, debug APK, androidTest APK, lint
-.\gradlew.bat testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug
+---
 
-# Backend tests (built-in node test runner, no npm install / no node_modules needed)
-cd backend; node --test --test-isolation=none
+## 2. Quy tắc Git
+
+```
+Commit nhỏ, mục đích rõ:
+  fix: sửa validation valid khi keepExtra=false (PlantsScreen)
+  feat: thêm error state cho removeItem/done/snooze (PlantsViewModel)
+  test: bổ sung unit test lỗi ViewModel
+  docs: cập nhật HANDOFF.md sau khi sửa P1
 ```
 
-- Single JVM test: `.\gradlew.bat testDebugUnitTest --tests com.example.vuonnha.domain.ScheduleTest`
-- Single instrumented test (device/emulator + both APKs installed): `adb -s SERIAL shell am instrument -w -e class com.example.vuonnha.GardenNavigationTest com.example.vuonnha.test/androidx.test.runner.AndroidJUnitRunner`
-- There is no CI config in this repo; run the commands locally.
+- **Không commit:** `.env`, `backend/data/`, `local.properties`, `app/build/`, `*.log`, `.idea/`, `.kotlin/`, `node_modules/`
+- **Phải commit:** Mọi file `.kt`, `.mjs`, `.md`, `build.gradle.kts`, `libs.versions.toml`, `AndroidManifest.xml`, drawables, XML resources
+- Trước mỗi commit: chạy `git diff --stat HEAD` để xem thay đổi thực tế
+- Không push lên GitHub nếu chưa được người dùng đồng ý.
+- Không force-push. Không rebase history đã chia sẻ.
 
-## Setup gotchas
+---
 
-- Android: minSdk 26, compile/target SDK 37, AGP 9.3.3, Kotlin 2.2.10, Room 2.8.4, KSP. Gradle daemon toolchain is JDK 25 (declared via foojay resolver); configuration cache is on.
-- Backend: Node.js 24+, ESM, `127.0.0.1:8787` only. No npm dependencies — never add one without cause. Start with `backend/run-backend.cmd` (loads `.env` and runs `connect-usb.ps1` for `adb reverse`), or `node --env-file=.env server.mjs` from `backend/`.
-- `GEMINI_API_KEY` and `SCAN_TOKEN` live only in `backend/.env` (gitignored; copy `.env.example`). The Android debug build's `SCAN_TOKEN` is a local dev token hard-coded in `app/build.gradle.kts` (see that file for the value), **not** the Gemini key. Never put a Gemini key in the APK or docs.
-- Release builds require `SCAN_ENDPOINT` to be empty or `https://` (enforced in `app/build.gradle.kts`).
-- Do not run a second backend while port 8787 is in use; `/health` only proves env vars exist, not that the Gemini key/quota works.
-- When testing on emulator/device, re-run `backend/connect-usb.ps1` (or `adb reverse tcp:8787 tcp:8787`) after replugging/restarting.
+## 3. Phân vùng trách nhiệm
 
-## Testing quirks
+### Codex — agent hiện đang thực hiện nhiệm vụ
+- Sửa lỗi P0/P1 trong AddSheet và các luồng liên quan khi người dùng yêu cầu; các bản vá M2, M3, B1–B3 cùng phần B3 bổ sung đã được thực hiện theo yêu cầu trực tiếp của người dùng.
+- Thực hiện các sửa lỗi UI/luồng được người dùng giao, kèm JVM test và cập nhật handoff.
+- Phụ trách các thay đổi Room schema/migration khi có kế hoạch được duyệt; backend API/auth, luồng account/backup và dependency chỉ thay đổi khi người dùng yêu cầu rõ.
 
-- `AccountFlowTest` / `AccountBackupTest` hit an isolated backend on port **8788** and are gated: `AccountFlowTest` runs only with `-e accountAudit true` (and as guest in an isolated emulator). Never point them at the user's real backend/data.
-- `LiveRecognitionAuditTest`, `NotificationDeliveryAuditTest`, `GardenFlowAuditTest` are opt-in integration/audit tests that call real AI or need time; keep them out of normal/CI runs. `LiveRecognitionAuditTest` can consume Gemini quota.
-- Do not delete or rewrite existing passing tests; add new ones.
+### Antigravity làm được độc lập (không cần Codex review)
+- Sửa lỗi P1 trong `PlantsViewModel.kt` (error handling không thay đổi signature)
+- Sửa lỗi P1 trong `PlantsScreen.kt` (logic `valid` — không thay đổi UI flow)
+- Viết thêm JVM unit test và Android instrumented test
+- Cập nhật tài liệu `docs/HANDOFF.md`, `docs/ARCHITECTURE.md`
+- Tạo/cập nhật `AGENTS.md`
+- Sửa bug UI nhỏ không liên quan đến luồng chính
 
-## Style / documentation
+### Cần yêu cầu rõ của người dùng trước khi làm
+- Thay đổi Room schema hoặc migration
+- Thay đổi backend API endpoint hoặc authentication logic
+- Thay đổi luồng account/backup
+- Thêm dependency mới
 
-- Match existing conventions; do not add comments unless asked.
-- Update docs in place rather than creating new Markdown files: `README.md` (overview/status), `backend/README.md` (API/ops), `VuonNha_1/docs/ARCHITECTURE.md` (technical), `VuonNha_1/docs/HANDOFF.md` (handoff state), `VuonNha_1/AGENTS.md` (team rules).
-- Do not run `git clean`, `git reset --hard`, or delete `backend/data/`, diary photos, AVDs, or `.audit/`.
+---
 
-## Workflow
+## 4. Quy tắc test
 
-- Read `VuonNha_1/docs/HANDOFF.md` before starting any task.
-- Do only the task asked, in small steps.
-- Never read, print or copy `backend/.env`, `local.properties`, or any key/token.
-- After each task, update `VuonNha_1/docs/HANDOFF.md` with what was done, files changed, commands run and results, uncertainties, and a suggested next step.
-- Do not commit.
+- **Không xóa test hiện có.** Chỉ thêm, không sửa test đã đạt trừ khi có lý do rõ ràng.
+- Mọi lần sửa code phải kèm test xác minh.
+- Test account (`AccountFlowTest`, `AccountBackupTest`) cần server riêng cổng 8788 — không chạy lẫn vào môi trường production.
+- `LiveRecognitionAuditTest`, `NotificationDeliveryAuditTest`, `GardenFlowAuditTest` là audit test — không chạy trong CI tự động, chỉ chạy khi kiểm tra tích hợp.
+
+---
+
+## 5. Quy tắc backend
+
+- Không lưu API key trong code, APK hay tài liệu.
+- `SCAN_TOKEN` trong debug build (`vuonnha-local-2026`) là token phát triển, không phải Gemini key.
+- Backend chỉ lắng nghe `127.0.0.1` (localhost). Không expose ra ngoài khi phát triển cục bộ.
+- Khi sửa backend: chạy `node --test --test-isolation=none` từ thư mục `backend/` trước khi commit.
+
+---
+
+## 6. Quy tắc tài liệu
+
+- **README.md** (`VuonNha_1/README.md`): Tổng quan, luồng, hiện trạng, ưu tiên — Codex cập nhật.
+- **backend/README.md**: Cấu hình, API, bảo mật — Codex cập nhật.
+- **docs/ARCHITECTURE.md**: Mô tả kỹ thuật — cả hai AI cập nhật khi thay đổi kiến trúc.
+- **docs/HANDOFF.md**: Trạng thái bàn giao — AI nào hoàn thành việc gì thì cập nhật.
+- **AGENTS.md** (file này): Quy tắc — cập nhật khi có thỏa thuận mới.
+
+Không tạo thêm Markdown theo từng lần sửa. Sửa nội dung tại chỗ trong các file trên.
